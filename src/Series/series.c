@@ -4,7 +4,6 @@
 #include <stdbool.h>
 
 #include "series.h"                // The new series header
-#include "../DynamicArray/dynamic_array.h"  // if needed for direct references
 
 /*
  * Helper: Duplicate string safely.

@@ -3,18 +3,9 @@
 
 #include <stddef.h>   // for size_t
 #include <stdbool.h>  // for bool
+#include "../Tools/column_type.h"
+#include "../../../DataStructures/src/DynamicArray/dynamic_array.h"
 
-#include "../DynamicArray/dynamic_array.h"  // or wherever dynamic_array.h is
-
-/*
- * ColumnType enum might live in dataframe.h, but if it’s needed by Series
- * alone, you can keep it here. For consistency, let's keep it here.
- */
-typedef enum {
-    DF_INT,
-    DF_DOUBLE,
-    DF_STRING
-} ColumnType;
 
 /*
  * Series: a single column of data (with a name, type, and dynamic array).
