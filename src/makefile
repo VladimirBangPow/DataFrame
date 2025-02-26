@@ -4,8 +4,8 @@ CFLAGS = -Wall -Wextra -O2
 SRC = \
 	main.c \
 	DataFrame/core/dataframe_core.c DataFrame/core/dataframe_core_test.c \
-	DataFrame/query/dataframe_query.c \
-	DataFrame/print/dataframe_print.c \
+	DataFrame/query/dataframe_query.c DataFrame/query/dataframe_query_test.c \
+	DataFrame/print/dataframe_print.c DataFrame/print/dataframe_print_test.c \
 	DataFrame/csv/dataframe_csv.c \
 	DataFrame/plot/dataframe_plot.c \
 	DataFrame/date/dataframe_date.c \
