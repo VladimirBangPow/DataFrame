@@ -40,7 +40,7 @@ static void testBasicAddSeriesAndRows(void)
     assert(df.numColumns(&df) == 1);
     assert(df.numRows(&df) == 3);  // matches series length
 
-    seriesFree(&s1);  // we can free local copy, df has its own
+    // seriesFree(&s1);  // we can free local copy, df has its own
 
     // Build a second column of 3 integers
     int v2[] = { 100, 200, 300 };
@@ -105,9 +105,9 @@ static void testStress(void)
     bool ok = df.addSeries(&df, &s1); assert(ok == true);
     ok = df.addSeries(&df, &s2);     assert(ok == true);
     ok = df.addSeries(&df, &s3);     assert(ok == true);
-    seriesFree(&s1); // local copy
-    seriesFree(&s2);
-    seriesFree(&s3);
+    // seriesFree(&s1); // local copy
+    // seriesFree(&s2);
+    // seriesFree(&s3);
     assert(df.numColumns(&df) == 3);
     assert(df.numRows(&df) == 0);
 

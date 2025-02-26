@@ -1,64 +1,83 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include "../dataframe.h"
 
-/* Forward declarations of all 'static' implementations from other .c files: */
-extern void   dfInit_impl(DataFrame* df);
-extern void   dfFree_impl(DataFrame* df);
-extern bool   dfAddSeries_impl(DataFrame* df, const Series* s);
+// If your DataFrame struct references RowPredicate or RowFunction, 
+// make sure they are declared in `dataframe.h`, e.g.:
+// typedef bool (*RowPredicate)(const struct DataFrame*, size_t);
+// typedef void (*RowFunction)(struct DataFrame* outDF, const struct DataFrame* inDF, size_t rowIndex);
+
+/* 
+   Forward declarations of all *impl functions from other .c files 
+   (matching return types exactly).
+*/
+extern void dfInit_impl(DataFrame* df);
+extern void dfFree_impl(DataFrame* df);
+extern bool dfAddSeries_impl(DataFrame* df, const Series* s);
 extern size_t dfNumColumns_impl(const DataFrame* df);
 extern size_t dfNumRows_impl(const DataFrame* df);
 extern const Series* dfGetSeries_impl(const DataFrame* df, size_t colIndex);
-extern bool   dfAddRow_impl(DataFrame* df, const void** rowData);
+extern bool dfAddRow_impl(DataFrame* df, const void** rowData);
 
-extern void dfHead_impl(const DataFrame* df, size_t n);
-extern void dfTail_impl(const DataFrame* df, size_t n);
-extern void dfDescribe_impl(const DataFrame* df);
+/* The corrected signatures now return DataFrame: */
+extern DataFrame dfHead_impl(const DataFrame* df, size_t n);
+extern DataFrame dfTail_impl(const DataFrame* df, size_t n);
+extern DataFrame dfDescribe_impl(const DataFrame* df);
 
+extern DataFrame dfSlice_impl(const DataFrame* df, size_t start, size_t end);
+extern DataFrame dfSample_impl(const DataFrame* df, size_t count);
+extern DataFrame dfSelectColumns_impl(const DataFrame* df, const size_t* colIndices, size_t count);
+extern DataFrame dfDropColumns_impl(const DataFrame* df, const size_t* dropIndices, size_t dropCount);
+extern DataFrame dfRenameColumns_impl(const DataFrame* df, const char** oldNames, const char** newNames, size_t count);
+extern DataFrame dfFilter_impl(const DataFrame* df, RowPredicate);
+extern DataFrame dfDropNA_impl(const DataFrame* df);
+extern DataFrame dfSort_impl(const DataFrame* df, size_t colIndex, bool ascending);
+extern DataFrame dfGroupBy_impl(const DataFrame* df, size_t groupColIndex);
+extern DataFrame dfPivot_impl(const DataFrame* df, size_t indexCol, size_t columnsCol, size_t valuesCol);
+extern DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount);
+extern DataFrame dfDropDuplicates_impl(const DataFrame* df, const size_t* subsetCols, size_t subsetCount);
+extern DataFrame dfUnique_impl(const DataFrame* df, size_t colIndex);
+
+extern double   dfSum_impl(const DataFrame* df, size_t colIndex);
+extern double   dfMean_impl(const DataFrame* df, size_t colIndex);
+extern double   dfMin_impl(const DataFrame* df, size_t colIndex);
+extern double   dfMax_impl(const DataFrame* df, size_t colIndex);
+
+extern DataFrame dfTranspose_impl(const DataFrame* df);
+extern size_t    dfIndexOf_impl(const DataFrame* df, size_t colIndex, double value);
+extern DataFrame dfApply_impl(const DataFrame* df, RowFunction);
+extern DataFrame dfWhere_impl(const DataFrame* df, RowPredicate, double);
+extern DataFrame dfExplode_impl(const DataFrame* df, size_t colIndex);
+
+/* Other non-query methods: */
 extern void dfPrint_impl(const DataFrame* df);
-
 extern bool readCsv_impl(DataFrame* df, const char* filename);
-
-extern void dfPlot_impl(
-    const DataFrame* df,
-    size_t xColIndex,
-    const size_t* yColIndices,
-    size_t yCount,
-    const char* plotType,
-    const char* outputFile
-);
-
-extern bool dfConvertDatesToEpoch_impl(
-    DataFrame* df, 
-    size_t dateColIndex, 
-    const char* formatType, 
-    bool toMillis
-);
-
+extern void dfPlot_impl(const DataFrame* df,
+                        size_t xColIndex,
+                        const size_t* yColIndices,
+                        size_t yCount,
+                        const char* plotType,
+                        const char* outputFile);
+extern bool dfConvertDatesToEpoch_impl(DataFrame* df,
+                                       size_t dateColIndex,
+                                       const char* formatType,
+                                       bool toMillis);
 
 
 /* -------------------------------------------------------------------------
  * Core Implementation Functions
  * ------------------------------------------------------------------------- */
 
-/**
- * dfInit_impl
- * Initializes the DataFrame by setting up the dynamic array for columns
- * and zeroing out nrows.
- */
 void dfInit_impl(DataFrame* df)
 {
     if (!df) return;
-    // Initialize the 'columns' dynamic array with initial capacity, e.g. 4
+    // Initialize the 'columns' dynamic array with initial capacity
     daInit(&df->columns, 4);
     df->nrows = 0;
 }
 
-/**
- * dfFree_impl
- * Frees all Series within the DataFrame and then frees the dynamic array.
- */
 void dfFree_impl(DataFrame* df)
 {
     if (!df) return;
@@ -67,36 +86,28 @@ void dfFree_impl(DataFrame* df)
         Series* s = (Series*)daGetMutable(&df->columns, i);
         seriesFree(s);
     }
-    // Free the columns array
     daFree(&df->columns);
     df->nrows = 0;
 }
 
-/**
- * dfAddSeries_impl
- * Adds a new Series to the DataFrame, ensuring row count matches existing columns.
- */
 bool dfAddSeries_impl(DataFrame* df, const Series* s)
 {
     if (!df || !s) return false;
 
-    // If DataFrame has no columns yet, take the series size as df->nrows
     if (daSize(&df->columns) == 0) {
         df->nrows = seriesSize(s);
     } else {
-        // Otherwise, must match existing nrows
         if (seriesSize(s) != df->nrows) {
-            fprintf(stderr,
+            fprintf(stderr, 
                 "Error: new Series '%s' has %zu rows; DataFrame has %zu rows.\n",
                 s->name, seriesSize(s), df->nrows);
             return false;
         }
     }
 
-    // Create a local copy of the Series so the DataFrame owns its own data
+    // Copy the incoming Series
     Series newSeries;
     seriesInit(&newSeries, s->name, s->type);
-
     for (size_t i = 0; i < seriesSize(s); i++) {
         switch (s->type) {
             case DF_INT: {
@@ -123,25 +134,38 @@ bool dfAddSeries_impl(DataFrame* df, const Series* s)
     return true;
 }
 
-/**
- * dfAddRow_impl
- * Adds a new row of data (void** rowData) to each column, updating nrows by 1.
- */
+size_t dfNumColumns_impl(const DataFrame* df)
+{
+    if (!df) return 0;
+    return daSize(&df->columns);
+}
+
+size_t dfNumRows_impl(const DataFrame* df)
+{
+    if (!df) return 0;
+    return df->nrows;
+}
+
+const Series* dfGetSeries_impl(const DataFrame* df, size_t colIndex)
+{
+    if (!df) return NULL;
+    if (colIndex >= daSize(&df->columns)) return NULL;
+    return (const Series*)daGet(&df->columns, colIndex);
+}
+
 bool dfAddRow_impl(DataFrame* df, const void** rowData)
 {
     if (!df || !rowData) return false;
 
     size_t nCols = daSize(&df->columns);
     if (nCols == 0) {
-        fprintf(stderr, "Error: DataFrame has no columns; cannot add row.\n");
+        fprintf(stderr, "Error: DataFrame has no columns; can't add row.\n");
         return false;
     }
 
-    // For each column, insert the corresponding element from rowData
     for (size_t c = 0; c < nCols; c++) {
         Series* s = (Series*)daGetMutable(&df->columns, c);
         if (!s) return false;
-
         switch (s->type) {
             case DF_INT: {
                 const int* valPtr = (const int*)rowData[c];
@@ -160,40 +184,8 @@ bool dfAddRow_impl(DataFrame* df, const void** rowData)
             } break;
         }
     }
-
     df->nrows += 1;
     return true;
-}
-
-/**
- * dfNumColumns_impl
- * Returns how many columns are in the DataFrame.
- */
-size_t dfNumColumns_impl(const DataFrame* df)
-{
-    if (!df) return 0;
-    return daSize(&df->columns);
-}
-
-/**
- * dfNumRows_impl
- * Returns how many rows are in the DataFrame.
- */
-size_t dfNumRows_impl(const DataFrame* df)
-{
-    if (!df) return 0;
-    return df->nrows;
-}
-
-/**
- * dfGetSeries_impl
- * Returns a pointer to the Series at colIndex, or NULL if out of range.
- */
-const Series* dfGetSeries_impl(const DataFrame* df, size_t colIndex)
-{
-    if (!df) return NULL;
-    if (colIndex >= daSize(&df->columns)) return NULL;
-    return (const Series*)daGet(&df->columns, colIndex);
 }
 
 /* -------------------------------------------------------------
@@ -204,7 +196,7 @@ void DataFrame_Create(DataFrame* df)
     if (!df) return;
     memset(df, 0, sizeof(*df));
 
-    // Hook up all function pointers in one shot:
+    // Hook up the "core" pointers:
     df->init         = dfInit_impl;
     df->free         = dfFree_impl;
     df->addSeries    = dfAddSeries_impl;
@@ -213,11 +205,39 @@ void DataFrame_Create(DataFrame* df)
     df->getSeries    = dfGetSeries_impl;
     df->addRow       = dfAddRow_impl;
 
-    df->head         = dfHead_impl;
-    df->tail         = dfTail_impl;
-    df->describe     = dfDescribe_impl;
-    df->print        = dfPrint_impl;
+    // Now the "query" pointers that return DataFrame:
+    df->head         = dfHead_impl;        // DataFrame(*)(const DataFrame*, size_t)
+    df->tail         = dfTail_impl;        // DataFrame(*)(const DataFrame*, size_t)
+    df->describe     = dfDescribe_impl;    // DataFrame(*)(const DataFrame*)
+    df->slice        = dfSlice_impl;       // DataFrame(*)(const DataFrame*, size_t, size_t)
+    df->sample       = dfSample_impl;
+    df->selectColumns = dfSelectColumns_impl;
+    df->dropColumns  = dfDropColumns_impl;
+    df->renameColumns = dfRenameColumns_impl;
+    df->filter       = dfFilter_impl;
+    df->dropNA       = dfDropNA_impl;
+    df->sort         = dfSort_impl;
+    df->groupBy      = dfGroupBy_impl;
+    df->pivot        = dfPivot_impl;
+    df->melt         = dfMelt_impl;
+    df->dropDuplicates = dfDropDuplicates_impl;
+    df->unique       = dfUnique_impl;
 
+    // Aggregation returning double:
+    df->sum          = dfSum_impl;
+    df->mean         = dfMean_impl;
+    df->min          = dfMin_impl;
+    df->max          = dfMax_impl;
+
+    // Others:
+    df->transpose    = dfTranspose_impl;
+    df->indexOf      = dfIndexOf_impl;
+    df->apply        = dfApply_impl;
+    df->where        = dfWhere_impl;
+    df->explode      = dfExplode_impl;
+
+    // Printing / IO:
+    df->print        = dfPrint_impl;
     df->readCsv      = readCsv_impl;
     df->plot         = dfPlot_impl;
     df->convertDatesToEpoch = dfConvertDatesToEpoch_impl;

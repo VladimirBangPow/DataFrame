@@ -21,3 +21,14 @@ myprogram: $(OBJ)
 
 clean:
 	rm -f myprogram $(OBJ)
+
+# ----------------------------------------
+# ASAN build
+# ----------------------------------------
+# This adds -fsanitize=address (and some recommended flags).
+# You can build with: make asan
+# It produces an executable named 'myprogram' but with ASAN enabled.
+ASANFLAGS = -fsanitize=address -g -O1 -fno-omit-frame-pointer
+
+asan: CFLAGS += $(ASANFLAGS)
+asan: clean myprogram
