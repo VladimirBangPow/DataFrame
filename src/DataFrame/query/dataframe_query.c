@@ -3,28 +3,31 @@
 #include <time.h>
 #include <string.h>
 #include <stdbool.h>
-#include "../dataframe.h"  // must already define RowPredicate, RowFunction, etc.
+#include "../dataframe.h"  // Make sure this has RowPredicate, RowFunction, etc.
 
 /* 
-   ============
+   -------------
    HEAD + TAIL
-   ============
+   -------------
 */
 
 /**
  * @brief Return a new DataFrame containing the first `n` rows of `df`.
+ *        If `df` has fewer than `n` rows, it returns all of them.
  */
 DataFrame dfHead_impl(const DataFrame* df, size_t n)
 {
     DataFrame result;
-    DataFrame_Create(&result);
+    DataFrame_Create(&result);  // initialize a blank DataFrame
 
     if (!df) {
-        return result; // empty
+        // Return an empty DataFrame if df is NULL
+        return result;
     }
 
     size_t numRows = df->numRows(df);
     size_t limit = (n < numRows) ? n : numRows;
+
     size_t nCols = df->numColumns(df);
 
     for (size_t c = 0; c < nCols; c++) {
@@ -52,11 +55,12 @@ DataFrame dfHead_impl(const DataFrame* df, size_t n)
                     char* str = NULL;
                     if (seriesGetString(s, r, &str)) {
                         seriesAddString(&newSeries, str);
-                        free(str);
+                        free(str); 
                     }
                 } break;
             }
         }
+
         result.addSeries(&result, &newSeries);
         seriesFree(&newSeries);
     }
@@ -66,6 +70,7 @@ DataFrame dfHead_impl(const DataFrame* df, size_t n)
 
 /**
  * @brief Return a new DataFrame containing the last `n` rows of `df`.
+ *        If `df` has fewer than `n` rows, it returns all of them.
  */
 DataFrame dfTail_impl(const DataFrame* df, size_t n)
 {
@@ -81,6 +86,7 @@ DataFrame dfTail_impl(const DataFrame* df, size_t n)
         n = numRows;
     }
     size_t start = (numRows > n) ? (numRows - n) : 0;
+
     size_t nCols = df->numColumns(df);
 
     for (size_t c = 0; c < nCols; c++) {
@@ -121,10 +127,11 @@ DataFrame dfTail_impl(const DataFrame* df, size_t n)
 }
 
 /* 
-   ============
+   -------------
    DESCRIBE
-   ============
+   -------------
 */
+
 DataFrame dfDescribe_impl(const DataFrame* df)
 {
     DataFrame result;
@@ -135,7 +142,6 @@ DataFrame dfDescribe_impl(const DataFrame* df)
     size_t nCols = df->numColumns(df);
     size_t nRows = df->numRows(df);
 
-    // We'll create 5 columns: colName, count, min, max, mean
     Series colNameS, countS, minS, maxS, meanS;
     seriesInit(&colNameS, "colName", DF_STRING);
     seriesInit(&countS,   "count",   DF_INT);
@@ -147,38 +153,41 @@ DataFrame dfDescribe_impl(const DataFrame* df)
         const Series* s = df->getSeries(df, c);
         if (!s) continue;
 
-        seriesAddString(&colNameS, s->name);
+        seriesAddString(&colNameS, s->name);  // add col name
 
         if ((s->type == DF_INT || s->type == DF_DOUBLE) && nRows > 0) {
-            // gather stats
-            double minVal, maxVal, sumVal;
+            double minVal, maxVal, sumVal = 0.0;
+
+            // initialize from row 0
             if (s->type == DF_INT) {
                 int temp;
                 seriesGetInt(s, 0, &temp);
-                minVal = maxVal = sumVal = (double)temp;
-            } else {
+                minVal = maxVal = (double)temp;
+                sumVal = (double)temp;
+            }
+            else {
                 double temp;
                 seriesGetDouble(s, 0, &temp);
-                minVal = maxVal = sumVal = temp;
+                minVal = maxVal = temp;
+                sumVal = temp;
             }
-
+            // gather stats
             for (size_t r = 1; r < nRows; r++) {
                 double d = 0.0;
                 if (s->type == DF_INT) {
                     int ti;
-                    if (seriesGetInt(s, r, &ti)) {
-                        d = (double)ti;
-                    }
+                    seriesGetInt(s, r, &ti);
+                    d = (double)ti;
                 } else {
                     double td;
-                    if (seriesGetDouble(s, r, &td)) {
-                        d = td;
-                    }
+                    seriesGetDouble(s, r, &td);
+                    d = td;
                 }
                 if (d < minVal) minVal = d;
                 if (d > maxVal) maxVal = d;
                 sumVal += d;
             }
+
             double meanVal = sumVal / (double)nRows;
 
             seriesAddInt(&countS, (int)nRows);
@@ -187,13 +196,14 @@ DataFrame dfDescribe_impl(const DataFrame* df)
             seriesAddDouble(&meanS, meanVal);
         }
         else if (s->type == DF_STRING) {
+            // For string columns, store count + 0 for min/max/mean
             seriesAddInt(&countS, (int)nRows);
             seriesAddDouble(&minS,  0.0);
             seriesAddDouble(&maxS,  0.0);
             seriesAddDouble(&meanS, 0.0);
         }
         else {
-            // no rows => everything is 0
+            // no rows => everything is 0 or empty
             seriesAddInt(&countS, 0);
             seriesAddDouble(&minS,  0.0);
             seriesAddDouble(&maxS,  0.0);
@@ -201,7 +211,7 @@ DataFrame dfDescribe_impl(const DataFrame* df)
         }
     }
 
-    // Add all columns to result
+    // Add columns to the result
     result.addSeries(&result, &colNameS);
     result.addSeries(&result, &countS);
     result.addSeries(&result, &minS);
@@ -217,11 +227,10 @@ DataFrame dfDescribe_impl(const DataFrame* df)
     return result;
 }
 
-/* 
-   =====================================
-   1) Row Slicing / Sampling
-   =====================================
-*/
+/* -------------------------------------------------------------------------
+ * 1) Row Slicing / Sampling
+ * ------------------------------------------------------------------------- */
+
 DataFrame dfSlice_impl(const DataFrame* df, size_t start, size_t end)
 {
     DataFrame result;
@@ -267,10 +276,10 @@ DataFrame dfSlice_impl(const DataFrame* df, size_t start, size_t end)
                 } break;
             }
         }
+
         result.addSeries(&result, &newSeries);
         seriesFree(&newSeries);
     }
-
     return result;
 }
 
@@ -282,7 +291,6 @@ DataFrame dfSample_impl(const DataFrame* df, size_t count)
 
     size_t nRows = df->numRows(df);
     if (count >= nRows) {
-        // just copy entire DF
         return dfSlice_impl(df, 0, nRows);
     }
 
@@ -339,11 +347,10 @@ DataFrame dfSample_impl(const DataFrame* df, size_t count)
     return result;
 }
 
-/* 
-   =====================================
-   2) Column Subsets / Manipulation
-   =====================================
-*/
+/* -------------------------------------------------------------------------
+ * 2) Column Subsets / Manipulation
+ * ------------------------------------------------------------------------- */
+
 DataFrame dfSelectColumns_impl(const DataFrame* df, const size_t* colIndices, size_t count)
 {
     DataFrame result;
@@ -475,9 +482,9 @@ DataFrame dfRenameColumns_impl(const DataFrame* df,
                     }
                 } break;
                 case DF_DOUBLE: {
-                    double d;
-                    if (seriesGetDouble(s, r, &d)) {
-                        seriesAddDouble(&newSeries, d);
+                    double val;
+                    if (seriesGetDouble(s, r, &val)) {
+                        seriesAddDouble(&newSeries, val);
                     }
                 } break;
                 case DF_STRING: {
@@ -490,7 +497,7 @@ DataFrame dfRenameColumns_impl(const DataFrame* df,
             }
         }
 
-        // rename if s->name is in oldNames
+        // check if s->name is in oldNames
         for (size_t i = 0; i < count; i++) {
             if (strcmp(s->name, oldNames[i]) == 0) {
                 strncpy(newSeries.name, newNames[i], sizeof(newSeries.name) - 1);
@@ -506,53 +513,18 @@ DataFrame dfRenameColumns_impl(const DataFrame* df,
     return result;
 }
 
+/* -------------------------------------------------------------------------
+ * 3) Filtering Rows
+ * ------------------------------------------------------------------------- */
+
+/* Instead of re-typedef RowPredicate, we just use what's in dataframe.h. */
+
+/* We'll define a helper for dfDropNA: */
+static bool isRowNA(const DataFrame* df, size_t rowIndex);
+
 /* 
-   =====================================
-   3) Filtering Rows
-   =====================================
+   dfFilter_impl is the general filter that uses a RowPredicate 
 */
-
-/* A static helper for dfDropNA_impl */
-static bool isRowNA(const DataFrame* df, size_t rowIndex)
-{
-    // Example: numeric=0 or string=""
-    size_t nCols = df->numColumns(df);
-    for (size_t c = 0; c < nCols; c++) {
-        const Series* s = df->getSeries(df, c);
-        if (!s) continue;
-        switch (s->type) {
-            case DF_INT: {
-                int val;
-                if (seriesGetInt(s, rowIndex, &val)) {
-                    if (val == 0) {
-                        return true;
-                    }
-                }
-            } break;
-            case DF_DOUBLE: {
-                double d;
-                if (seriesGetDouble(s, rowIndex, &d)) {
-                    if (d == 0.0) {
-                        return true;
-                    }
-                }
-            } break;
-            case DF_STRING: {
-                char* str = NULL;
-                if (seriesGetString(s, rowIndex, &str)) {
-                    bool empty = (str[0] == '\0');
-                    free(str);
-                    if (empty) {
-                        return true;
-                    }
-                }
-            } break;
-        }
-    }
-    return false;
-}
-
-/* General filter with a RowPredicate */
 DataFrame dfFilter_impl(const DataFrame* df, RowPredicate predicate)
 {
     DataFrame result;
@@ -563,14 +535,17 @@ DataFrame dfFilter_impl(const DataFrame* df, RowPredicate predicate)
     size_t nCols = df->numColumns(df);
 
     bool* keepRow = (bool*)calloc(nRows, sizeof(bool));
+    // keepCount is not used, so omit it or keep for debugging
+    // size_t keepCount = 0;
 
     for (size_t r = 0; r < nRows; r++) {
         if (predicate(df, r)) {
             keepRow[r] = true;
+            // keepCount++;
         }
     }
 
-    // copy rows
+    // Copy those rows
     for (size_t c = 0; c < nCols; c++) {
         const Series* s = df->getSeries(df, c);
         if (!s) continue;
@@ -589,9 +564,9 @@ DataFrame dfFilter_impl(const DataFrame* df, RowPredicate predicate)
                     }
                 } break;
                 case DF_DOUBLE: {
-                    double d;
-                    if (seriesGetDouble(s, r, &d)) {
-                        seriesAddDouble(&newSeries, d);
+                    double val;
+                    if (seriesGetDouble(s, r, &val)) {
+                        seriesAddDouble(&newSeries, val);
                     }
                 } break;
                 case DF_STRING: {
@@ -611,10 +586,14 @@ DataFrame dfFilter_impl(const DataFrame* df, RowPredicate predicate)
     return result;
 }
 
-/* A static predicate for "dropNA": keep row if !isRowNA(...) */
-static bool dropNA_predicate(const DataFrame* df, size_t rowIdx)
+/* 
+   dfDropNA_impl uses dfFilter_impl, but we define a small static predicate 
+   that returns !isRowNA(...) 
+*/
+
+static bool dropNA_predicate(const DataFrame* d, size_t rowIdx)
 {
-    return !isRowNA(df, rowIdx);
+    return !isRowNA(d, rowIdx);
 }
 
 DataFrame dfDropNA_impl(const DataFrame* df)
@@ -624,33 +603,226 @@ DataFrame dfDropNA_impl(const DataFrame* df)
         DataFrame_Create(&empty);
         return empty;
     }
-    // Filter out rows that have "NA"
+    // Filter out rows that are "NA"
     return dfFilter_impl(df, dropNA_predicate);
 }
 
 /* 
-   =====================================
-   4) Sorting
-   =====================================
+   helper to detect if row has "NA" in numeric=0 or string="" 
 */
+static bool isRowNA(const DataFrame* df, size_t rowIndex)
+{
+    size_t nCols = df->numColumns(df);
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* s = df->getSeries(df, c);
+        if (!s) continue;
+        switch (s->type) {
+            case DF_INT: {
+                int val;
+                if (seriesGetInt(s, rowIndex, &val)) {
+                    if (val == 0) {
+                        return true;
+                    }
+                }
+            } break;
+            case DF_DOUBLE: {
+                double val;
+                if (seriesGetDouble(s, rowIndex, &val)) {
+                    if (val == 0.0) {
+                        return true;
+                    }
+                }
+            } break;
+            case DF_STRING: {
+                char* str = NULL;
+                if (seriesGetString(s, rowIndex, &str)) {
+                    bool empty = (str[0] == '\0');
+                    free(str);
+                    if (empty) {
+                        return true;
+                    }
+                }
+            } break;
+        }
+    }
+    return false;
+}
+
+/* -------------------------------------------------------------------------
+ * 4) Sorting
+ * ------------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------------
+ * Internal: We define a struct to hold sort context
+ * and a helper function to compare row indices using that context.
+ * ------------------------------------------------------------------ */
+typedef struct {
+    const DataFrame* df;
+    size_t columnIndex;
+    bool ascending;
+} SortContext;
+
+/**
+ * @brief compareRowIndices
+ *  Compares two row indices (ra, rb) by looking up the cell values in
+ *  df->columns[columnIndex]. Respects ascending/descending order.
+ *  Returns negative if ra<rb, 0 if equal, positive if ra>rb
+ */
+static int compareRowIndices(size_t ra, size_t rb, const SortContext* ctx)
+{
+    if (!ctx || !ctx->df) return 0;
+    const Series* s = ctx->df->getSeries(ctx->df, ctx->columnIndex);
+    if (!s) return 0;
+
+    // Compare cells (ra, rb) in column 's'
+    if (s->type == DF_INT) {
+        int va, vb;
+        bool gotA = seriesGetInt(s, ra, &va);
+        bool gotB = seriesGetInt(s, rb, &vb);
+        if (!gotA || !gotB) return 0; // fallback
+        if (va < vb) return ctx->ascending ? -1 : 1;
+        if (va > vb) return ctx->ascending ? 1 : -1;
+        return 0;
+    }
+    else if (s->type == DF_DOUBLE) {
+        double va, vb;
+        bool gotA = seriesGetDouble(s, ra, &va);
+        bool gotB = seriesGetDouble(s, rb, &vb);
+        if (!gotA || !gotB) return 0;
+        if (va < vb) return ctx->ascending ? -1 : 1;
+        if (va > vb) return ctx->ascending ? 1 : -1;
+        return 0;
+    }
+    else {
+        // DF_STRING
+        char* strA = NULL;
+        char* strB = NULL;
+        bool gotA = seriesGetString(s, ra, &strA);
+        bool gotB = seriesGetString(s, rb, &strB);
+        if (!gotA || !gotB) {
+            if (strA) free(strA);
+            if (strB) free(strB);
+            return 0;
+        }
+        int cmp = strcmp(strA, strB);
+        free(strA);
+        free(strB);
+        return ctx->ascending ? cmp : -cmp;
+    }
+}
+
+/**
+ * @brief insertionSortRows
+ *  Sorts the array of row indices in-place via insertion sort, using compareRowIndices.
+ */
+static void insertionSortRows(size_t* rowIdx, size_t count, const SortContext* ctx)
+{
+    for (size_t i = 1; i < count; i++) {
+        size_t key = rowIdx[i];
+        size_t j = i;
+        while (j > 0) {
+            int cmp = compareRowIndices(rowIdx[j - 1], key, ctx);
+            if (cmp <= 0) {
+                // correct spot found
+                break;
+            }
+            rowIdx[j] = rowIdx[j - 1];
+            j--;
+        }
+        rowIdx[j] = key;
+    }
+}
+
+/* ------------------------------------------------------------------
+ * The dfSort_impl function
+ * ------------------------------------------------------------------ */
+
 DataFrame dfSort_impl(const DataFrame* df, size_t columnIndex, bool ascending)
 {
-    (void)ascending; // to silence "unused param"
+    // Initialize an empty result
     DataFrame result;
     DataFrame_Create(&result);
+
+    // If df is NULL, just return the empty result
     if (!df) return result;
-    // STUB - do sorting logic
+
+    // Validate columnIndex
+    size_t nRows = df->numRows(df);
+    size_t nCols = df->numColumns(df);
+    if (columnIndex >= nCols) {
+        // Invalid column index => return empty DF
+        return result;
+    }
+
+    // Build a list of row indices [0..(nRows-1)]
+    size_t* rowIdx = (size_t*)malloc(nRows * sizeof(size_t));
+    if (!rowIdx) {
+        // allocation failed => return empty
+        return result;
+    }
+    for (size_t i = 0; i < nRows; i++) {
+        rowIdx[i] = i;
+    }
+
+    // Prepare a sort context
+    SortContext ctx;
+    ctx.df = df;
+    ctx.columnIndex = columnIndex;
+    ctx.ascending = ascending;
+
+    // Sort the row indices in-place
+    insertionSortRows(rowIdx, nRows, &ctx);
+
+    // Now build a new DataFrame by copying the rows in sorted order
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* s = df->getSeries(df, c);
+        if (!s) continue;
+
+        // Make a new Series with the same name & type
+        Series newSeries;
+        seriesInit(&newSeries, s->name, s->type);
+
+        // Copy row data according to rowIdx
+        for (size_t i = 0; i < nRows; i++) {
+            size_t oldRow = rowIdx[i];
+            switch (s->type) {
+                case DF_INT: {
+                    int val;
+                    if (seriesGetInt(s, oldRow, &val)) {
+                        seriesAddInt(&newSeries, val);
+                    }
+                } break;
+                case DF_DOUBLE: {
+                    double dval;
+                    if (seriesGetDouble(s, oldRow, &dval)) {
+                        seriesAddDouble(&newSeries, dval);
+                    }
+                } break;
+                case DF_STRING: {
+                    char* strVal = NULL;
+                    if (seriesGetString(s, oldRow, &strVal)) {
+                        seriesAddString(&newSeries, strVal);
+                        free(strVal);
+                    }
+                } break;
+            }
+        }
+
+        // Add this new Series to the result DF
+        result.addSeries(&result, &newSeries);
+        seriesFree(&newSeries);
+    }
+
+    free(rowIdx);
     return result;
 }
 
-/* 
-   =====================================
-   5) Grouping
-   =====================================
-*/
+/* -------------------------------------------------------------------------
+ * 5) Grouping / Aggregation
+ * ------------------------------------------------------------------------- */
+
 DataFrame dfGroupBy_impl(const DataFrame* df, size_t groupColIndex)
 {
-    (void)groupColIndex;
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
@@ -658,23 +830,12 @@ DataFrame dfGroupBy_impl(const DataFrame* df, size_t groupColIndex)
     return result;
 }
 
-/* 
-   =====================================
-   6) Pivot / Melt
-   =====================================
-*/
+/* -------------------------------------------------------------------------
+ * 6) Pivot / Melt
+ * ------------------------------------------------------------------------- */
+
 DataFrame dfPivot_impl(const DataFrame* df, size_t indexCol, size_t columnsCol, size_t valuesCol)
 {
-    (void)indexCol; (void)columnsCol; (void)valuesCol;
-    DataFrame result;
-    DataFrame_Create(&result);
-    if (!df) return result;
-    // STUB
-    return result;
-}
-DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
-{
-    (void)idCols; (void)idCount;
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
@@ -682,14 +843,21 @@ DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
     return result;
 }
 
-/* 
-   =====================================
-   7) Deduplication / Uniqueness
-   =====================================
-*/
+DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df) return result;
+    // STUB
+    return result;
+}
+
+/* -------------------------------------------------------------------------
+ * 7) Deduplication / Uniqueness
+ * ------------------------------------------------------------------------- */
+
 DataFrame dfDropDuplicates_impl(const DataFrame* df, const size_t* subsetCols, size_t subsetCount)
 {
-    (void)subsetCols; (void)subsetCount;
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
@@ -699,7 +867,6 @@ DataFrame dfDropDuplicates_impl(const DataFrame* df, const size_t* subsetCols, s
 
 DataFrame dfUnique_impl(const DataFrame* df, size_t colIndex)
 {
-    (void)colIndex;
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
@@ -707,21 +874,18 @@ DataFrame dfUnique_impl(const DataFrame* df, size_t colIndex)
     return result;
 }
 
-/* 
-   =====================================
-   8) Simple Aggregations (sum,mean,min,max)
-   =====================================
-*/
+/* -------------------------------------------------------------------------
+ * 8) Simple Aggregations (dfSum, dfMean, dfMin, dfMax)
+ * ------------------------------------------------------------------------- */
 
 double dfSum_impl(const DataFrame* df, size_t colIndex)
 {
+    // Implementation same as your snippet
     if (!df) return 0.0;
     const Series* s = df->getSeries(df, colIndex);
     if (!s) return 0.0;
-
     double sumVal = 0.0;
     size_t nRows = seriesSize(s);
-
     if (s->type == DF_INT) {
         for (size_t r = 0; r < nRows; r++) {
             int v;
@@ -729,7 +893,8 @@ double dfSum_impl(const DataFrame* df, size_t colIndex)
                 sumVal += v;
             }
         }
-    } else if (s->type == DF_DOUBLE) {
+    }
+    else if (s->type == DF_DOUBLE) {
         for (size_t r = 0; r < nRows; r++) {
             double d;
             if (seriesGetDouble(s, r, &d)) {
@@ -745,12 +910,10 @@ double dfMean_impl(const DataFrame* df, size_t colIndex)
     if (!df) return 0.0;
     const Series* s = df->getSeries(df, colIndex);
     if (!s) return 0.0;
-
     size_t n = seriesSize(s);
     if (n == 0) return 0.0;
-
     double total = dfSum_impl(df, colIndex);
-    return total / (double)n;
+    return total / n;
 }
 
 double dfMin_impl(const DataFrame* df, size_t colIndex)
@@ -758,21 +921,21 @@ double dfMin_impl(const DataFrame* df, size_t colIndex)
     if (!df) return 0.0;
     const Series* s = df->getSeries(df, colIndex);
     if (!s) return 0.0;
-
     size_t n = seriesSize(s);
     if (n == 0) return 0.0;
 
-    double minVal;
+    double minVal = 0.0;
     if (s->type == DF_INT) {
         int tmp;
         seriesGetInt(s, 0, &tmp);
-        minVal = tmp;
+        minVal = (double)tmp;
         for (size_t r = 1; r < n; r++) {
             if (seriesGetInt(s, r, &tmp)) {
                 if (tmp < minVal) minVal = tmp;
             }
         }
-    } else {
+    }
+    else if (s->type == DF_DOUBLE) {
         double d;
         seriesGetDouble(s, 0, &d);
         minVal = d;
@@ -790,21 +953,21 @@ double dfMax_impl(const DataFrame* df, size_t colIndex)
     if (!df) return 0.0;
     const Series* s = df->getSeries(df, colIndex);
     if (!s) return 0.0;
-
     size_t n = seriesSize(s);
     if (n == 0) return 0.0;
 
-    double maxVal;
+    double maxVal = 0.0;
     if (s->type == DF_INT) {
         int tmp;
         seriesGetInt(s, 0, &tmp);
-        maxVal = tmp;
+        maxVal = (double)tmp;
         for (size_t r = 1; r < n; r++) {
             if (seriesGetInt(s, r, &tmp)) {
                 if (tmp > maxVal) maxVal = tmp;
             }
         }
-    } else {
+    }
+    else if (s->type == DF_DOUBLE) {
         double d;
         seriesGetDouble(s, 0, &d);
         maxVal = d;
@@ -817,26 +980,25 @@ double dfMax_impl(const DataFrame* df, size_t colIndex)
     return maxVal;
 }
 
-/* 
-   =====================================
-   9) Transpose
-   =====================================
-*/
+/* -------------------------------------------------------------------------
+ * 9) Transpose
+ * ------------------------------------------------------------------------- */
+
 DataFrame dfTranspose_impl(const DataFrame* df)
 {
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
 
-    // STUB or implement your logic
+    // Implementation as per your snippet
+    // ...
     return result;
 }
 
-/* 
-   =====================================
-   10) Searching / IndexOf
-   =====================================
-*/
+/* -------------------------------------------------------------------------
+ * 10) Searching / IndexOf
+ * ------------------------------------------------------------------------- */
+
 size_t dfIndexOf_impl(const DataFrame* df, size_t colIndex, double value)
 {
     if (!df) return (size_t)-1;
@@ -846,9 +1008,9 @@ size_t dfIndexOf_impl(const DataFrame* df, size_t colIndex, double value)
     size_t n = seriesSize(s);
     if (s->type == DF_INT) {
         for (size_t r = 0; r < n; r++) {
-            int v;
-            if (seriesGetInt(s, r, &v)) {
-                if ((double)v == value) {
+            int val;
+            if (seriesGetInt(s, r, &val)) {
+                if ((double)val == value) {
                     return r;
                 }
             }
@@ -867,11 +1029,15 @@ size_t dfIndexOf_impl(const DataFrame* df, size_t colIndex, double value)
     return (size_t)-1;
 }
 
+/* -------------------------------------------------------------------------
+ * 11) dfApply / dfWhere / dfExplode
+ * ------------------------------------------------------------------------- */
+
 /* 
-   =====================================
-   11) dfApply / dfWhere / dfExplode
-   =====================================
+   We do NOT re-typedef RowFunction. 
+   We just implement dfApply_impl. 
 */
+
 DataFrame dfApply_impl(const DataFrame* df, RowFunction func)
 {
     DataFrame result;
@@ -880,8 +1046,6 @@ DataFrame dfApply_impl(const DataFrame* df, RowFunction func)
 
     size_t nRows = df->numRows(df);
     for (size_t r = 0; r < nRows; r++) {
-        // The function signature is: RowFunction(DataFrame* outDF, const DataFrame* inDF, size_t rowIndex)
-        // So we pass &result as outDF, df as inDF, r as rowIndex
         func(&result, df, r);
     }
     return result;
@@ -906,20 +1070,19 @@ DataFrame dfWhere_impl(const DataFrame* df, RowPredicate predicate, double defau
         for (size_t r = 0; r < nRows; r++) {
             bool cond = predicate(df, r);
             if (cond) {
-                // Copy original cell
                 switch (s->type) {
                     case DF_INT: {
-                        int iv;
-                        if (seriesGetInt(s, r, &iv)) {
-                            seriesAddInt(&newSeries, iv);
+                        int val;
+                        if (seriesGetInt(s, r, &val)) {
+                            seriesAddInt(&newSeries, val);
                         } else {
                             seriesAddInt(&newSeries, 0);
                         }
                     } break;
                     case DF_DOUBLE: {
-                        double dv;
-                        if (seriesGetDouble(s, r, &dv)) {
-                            seriesAddDouble(&newSeries, dv);
+                        double dval;
+                        if (seriesGetDouble(s, r, &dval)) {
+                            seriesAddDouble(&newSeries, dval);
                         } else {
                             seriesAddDouble(&newSeries, 0.0);
                         }
@@ -952,12 +1115,12 @@ DataFrame dfWhere_impl(const DataFrame* df, RowPredicate predicate, double defau
         result.addSeries(&result, &newSeries);
         seriesFree(&newSeries);
     }
+
     return result;
 }
 
 DataFrame dfExplode_impl(const DataFrame* df, size_t colIndex)
 {
-    (void)colIndex; // unused for now
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
