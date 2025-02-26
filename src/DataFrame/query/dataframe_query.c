@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "dataframe.h"
+#include "../dataframe.h"
 
 void dfHead_impl(const DataFrame* df, size_t n)
 {

@@ -1,18 +1,9 @@
 #include <stdio.h>
 #include "DataFrame/dataframe.h"
+#include "./DataFrame/core/dataframe_core_test.h"
 
 int main(void)
 {
-    DataFrame df;
-    DataFrame_Create(&df);
-
-    // Now all methods are set. For example:
-    df.readCsv(&df, "./DataFrame/data/btcusd.csv");
-    df.print(&df);
-    df.head(&df, 5);
-    df.describe(&df);
-
-    // Clean up
-    DataFrame_Destroy(&df);
+    testCore();
     return 0;
 }

@@ -3,7 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
-#include "dataframe.h"
+#include "../dataframe.h"
 
 /* -------------------------------------------------------------------------
  *  Forward-declared static helpers

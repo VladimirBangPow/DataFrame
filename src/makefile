@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -O2
 
 SRC = \
 	main.c \
-	DataFrame/core/dataframe_core.c \
+	DataFrame/core/dataframe_core.c DataFrame/core/dataframe_core_test.c \
 	DataFrame/query/dataframe_query.c \
 	DataFrame/print/dataframe_print.c \
 	DataFrame/csv/dataframe_csv.c \
