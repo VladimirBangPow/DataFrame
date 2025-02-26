@@ -3,12 +3,12 @@ CFLAGS = -Wall -Wextra -O2
 
 SRC = \
 	main.c \
-	DataFrame/dataframe_core.c \
-	DataFrame/dataframe_query.c \
-	DataFrame/dataframe_print.c \
-	DataFrame/dataframe_csv.c \
-	DataFrame/dataframe_plot.c \
-	DataFrame/dataframe_date.c \
+	DataFrame/core/dataframe_core.c \
+	DataFrame/query/dataframe_query.c \
+	DataFrame/print/dataframe_print.c \
+	DataFrame/csv/dataframe_csv.c \
+	DataFrame/plot/dataframe_plot.c \
+	DataFrame/date/dataframe_date.c \
 	Series/series.c \
 	../../DataStructures/src/DynamicArray/dynamic_array.c
 

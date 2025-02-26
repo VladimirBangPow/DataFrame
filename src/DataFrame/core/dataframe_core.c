@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "dataframe.h"
+#include "../dataframe.h"
 
 /* Forward declarations of all 'static' implementations from other .c files: */
 extern void   dfInit_impl(DataFrame* df);
@@ -37,12 +37,6 @@ extern bool dfConvertDatesToEpoch_impl(
 );
 
 
-/* dataframe_core.c */
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include "dataframe.h"
 
 /* -------------------------------------------------------------------------
  * Core Implementation Functions
