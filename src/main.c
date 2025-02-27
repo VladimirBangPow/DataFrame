@@ -9,6 +9,7 @@
 #include "./DataFrame/indexing/dataframe_indexing_test.h"
 #include "./DataFrame/combine/dataframe_combine_test.h"
 #include "./DataFrame/reshape/dataframe_reshape_test.h"
+#include "./DataFrame/aggregate/dataframe_aggregate_test.h"
 int main(void)
 {
     testCore();
@@ -20,5 +21,6 @@ int main(void)
     testIndexing();
     testCombine();
     testReshape();
+    testAggregate();
     return 0;
 }

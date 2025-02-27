@@ -12,6 +12,7 @@ SRC = \
 	DataFrame/indexing/dataframe_indexing.c DataFrame/indexing/dataframe_indexing_test.c \
 	DataFrame/combine/dataframe_combine.c DataFrame/combine/dataframe_combine_test.c \
 	DataFrame/reshape/dataframe_reshape.c DataFrame/reshape/dataframe_reshape_test.c \
+	DataFrame/aggregate/dataframe_aggregate.c DataFrame/aggregate/dataframe_aggregate_test.c \
 	Series/series.c \
 	../../DataStructures/src/DynamicArray/dynamic_array.c
 
