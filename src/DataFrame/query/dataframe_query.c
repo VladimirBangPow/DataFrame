@@ -500,8 +500,9 @@ DataFrame dfRenameColumns_impl(const DataFrame* df,
         // check if s->name is in oldNames
         for (size_t i = 0; i < count; i++) {
             if (strcmp(s->name, oldNames[i]) == 0) {
-                strncpy(newSeries.name, newNames[i], sizeof(newSeries.name) - 1);
-                newSeries.name[sizeof(newSeries.name) - 1] = '\0';
+                free(newSeries.name); // free the old name (allocated to size of the old column's name)
+                newSeries.name = (char*)malloc(strlen(newNames[i]) + 1);
+                strcpy(newSeries.name, newNames[i]);
                 break;
             }
         }
@@ -1418,21 +1419,304 @@ DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
  * 7) Deduplication / Uniqueness
  * ------------------------------------------------------------------------- */
 
+/**
+ * Helper: buildRowKey
+ * Given a row r, create a string key from the columns in subsetCols.
+ * For example: "colVal1|colVal2|..."
+ */
+static void buildRowKey(const DataFrame* df,
+                        size_t row,
+                        const size_t* subsetCols,
+                        size_t subsetCount,
+                        char* outBuf,
+                        size_t bufSize)
+{
+    outBuf[0] = '\0';
+    if (!df) return;
+
+    for (size_t i = 0; i < subsetCount; i++) {
+        size_t colIdx = subsetCols[i];
+        const Series* s = df->getSeries(df, colIdx);
+        if (!s) continue;
+
+        // Convert cell to string
+        char valBuf[128] = "";
+        switch (s->type) {
+            case DF_INT: {
+                int ival;
+                if (seriesGetInt(s, row, &ival)) {
+                    snprintf(valBuf, sizeof(valBuf), "%d", ival);
+                }
+            } break;
+            case DF_DOUBLE: {
+                double dval;
+                if (seriesGetDouble(s, row, &dval)) {
+                    snprintf(valBuf, sizeof(valBuf), "%g", dval);
+                }
+            } break;
+            case DF_STRING: {
+                char* str = NULL;
+                if (seriesGetString(s, row, &str)) {
+                    strncpy(valBuf, str, sizeof(valBuf) - 1);
+                    valBuf[sizeof(valBuf) - 1] = '\0';
+                    free(str);
+                }
+            } break;
+        }
+
+        if (i > 0) {
+            strncat(outBuf, "|", bufSize - strlen(outBuf) - 1);
+        }
+        strncat(outBuf, valBuf, bufSize - strlen(outBuf) - 1);
+    }
+}
+
+/**
+ * We'll store a dynamic array of keys we've seen, and skip row r if the key is already present.
+ */
+typedef struct {
+    char* key;
+} DeduKey;
+
+/**
+ * hasKey / addKey: to check if a rowKey is in the array or not.
+ */
+static bool hasKey(DeduKey* arr, size_t used, const char* key)
+{
+    for (size_t i = 0; i < used; i++) {
+        if (strcmp(arr[i].key, key) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void addKey(DeduKey** arr, size_t* used, size_t* cap, const char* key)
+{
+    if (*used >= *cap) {
+        *cap = (*cap == 0) ? 64 : (*cap * 2);
+        *arr = (DeduKey*)realloc(*arr, (*cap) * sizeof(DeduKey));
+    }
+    (*arr)[*used].key = strdup(key);
+    (*used)++;
+}
+
+/**
+ * dfDropDuplicates_impl
+ * Keep the first occurrence of each unique row key (formed from subsetCols).
+ */
 DataFrame dfDropDuplicates_impl(const DataFrame* df, const size_t* subsetCols, size_t subsetCount)
 {
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
-    // STUB
+
+    size_t nCols = df->numColumns(df);
+    size_t nRows = df->numRows(df);
+
+    // If subsetCount == 0 => use all columns
+    int usedAll = 0;
+    size_t* allCols = NULL;
+    if (subsetCount == 0) {
+        usedAll = 1;
+        allCols = (size_t*)malloc(nCols * sizeof(size_t));
+        for (size_t i = 0; i < nCols; i++) {
+            allCols[i] = i;
+        }
+        subsetCols = allCols;
+        subsetCount = nCols;
+    }
+
+    // We'll store an array of (key) to track which row keys we've seen
+    DeduKey* usedKeys = NULL;
+    size_t usedSize = 0, usedCap = 0;
+
+    // We'll store the row indices that pass the filter in a local array
+    size_t* keepRows = (size_t*)malloc(nRows * sizeof(size_t));
+    size_t keepCount = 0;
+
+    // For each row, build a key from subsetCols => check if we have it
+    char rowBuf[1024];
+    for (size_t r = 0; r < nRows; r++) {
+        rowBuf[0] = '\0';
+        buildRowKey(df, r, subsetCols, subsetCount, rowBuf, sizeof(rowBuf));
+
+        if (!hasKey(usedKeys, usedSize, rowBuf)) {
+            // first time => keep row
+            addKey(&usedKeys, &usedSize, &usedCap, rowBuf);
+            keepRows[keepCount] = r;
+            keepCount++;
+        }
+    }
+
+    // Build the new DF from the kept rows
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* s = df->getSeries(df, c);
+        if (!s) continue;
+
+        // create a new Series with same name/type
+        Series newS;
+        seriesInit(&newS, s->name, s->type);
+
+        // copy the kept rows
+        for (size_t i = 0; i < keepCount; i++) {
+            size_t oldRow = keepRows[i];
+            switch (s->type) {
+                case DF_INT: {
+                    int ival;
+                    if (seriesGetInt(s, oldRow, &ival)) {
+                        seriesAddInt(&newS, ival);
+                    }
+                } break;
+                case DF_DOUBLE: {
+                    double dval;
+                    if (seriesGetDouble(s, oldRow, &dval)) {
+                        seriesAddDouble(&newS, dval);
+                    }
+                } break;
+                case DF_STRING: {
+                    char* str = NULL;
+                    if (seriesGetString(s, oldRow, &str)) {
+                        seriesAddString(&newS, str);
+                        free(str);
+                    }
+                } break;
+            }
+        }
+
+        // add to result
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+
+    // cleanup
+    for (size_t i = 0; i < usedSize; i++) {
+        free(usedKeys[i].key);
+    }
+    free(usedKeys);
+    free(keepRows);
+
+    if (usedAll) {
+        free((void*)subsetCols); // the allCols we allocated
+    }
+
     return result;
 }
 
+/*-------------------------------------------------------------------------
+ * 8) Uniqueness
+ * ------------------------------------------------------------------------ */
+
+
+/**
+ * Internal helper: track distinct string values in a dynamic array
+ */
+typedef struct {
+    char* val;
+} DistItem;
+
+/**
+ * Check if val is in the array, linear search
+ */
+static bool hasVal(DistItem* arr, size_t used, const char* val)
+{
+    for (size_t i = 0; i < used; i++) {
+        if (strcmp(arr[i].val, val) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void addVal(DistItem** arr, size_t* used, size_t* cap, const char* val)
+{
+    if (*used >= *cap) {
+        *cap = (*cap == 0) ? 16 : (*cap * 2);
+        *arr = (DistItem*)realloc(*arr, (*cap) * sizeof(DistItem));
+    }
+    (*arr)[*used].val = strdup(val);
+    (*used)++;
+}
+
+/**
+ * dfUnique_impl:
+ *  Returns a new DataFrame with exactly one column (DF_STRING) containing
+ *  the distinct values of the specified colIndex, in order of first appearance.
+ */
 DataFrame dfUnique_impl(const DataFrame* df, size_t colIndex)
 {
     DataFrame result;
     DataFrame_Create(&result);
-    if (!df) return result;
-    // STUB
+    if (!df) return result; // return empty
+
+    size_t nCols = df->numColumns(df);
+    if (colIndex >= nCols) {
+        // invalid col => return empty
+        return result;
+    }
+
+    const Series* s = df->getSeries(df, colIndex);
+    if (!s) {
+        // no such column => empty
+        return result;
+    }
+
+    // We'll gather distinct values in DistItem array
+    DistItem* arr = NULL;
+    size_t used = 0, cap = 0;
+
+    size_t nRows = df->numRows(df);
+    char buf[128];
+
+    // For each row, read cell -> convert to string -> if not present, add
+    for (size_t r = 0; r < nRows; r++) {
+        buf[0] = '\0';
+
+        switch (s->type) {
+            case DF_INT: {
+                int ival;
+                if (seriesGetInt(s, r, &ival)) {
+                    snprintf(buf, sizeof(buf), "%d", ival);
+                }
+            } break;
+            case DF_DOUBLE: {
+                double dval;
+                if (seriesGetDouble(s, r, &dval)) {
+                    snprintf(buf, sizeof(buf), "%g", dval);
+                }
+            } break;
+            case DF_STRING: {
+                char* str = NULL;
+                if (seriesGetString(s, r, &str)) {
+                    strncpy(buf, str, sizeof(buf) - 1);
+                    buf[sizeof(buf) - 1] = '\0';
+                    free(str);
+                }
+            } break;
+        }
+
+        if (buf[0] != '\0' && !hasVal(arr, used, buf)) {
+            addVal(&arr, &used, &cap, buf);
+        }
+    }
+
+    // Now build a single-col DataFrame with the same column name as s->name, but DF_STRING
+    Series newSeries;
+    seriesInit(&newSeries, s->name, DF_STRING);
+
+    for (size_t i = 0; i < used; i++) {
+        seriesAddString(&newSeries, arr[i].val);
+    }
+
+    result.addSeries(&result, &newSeries);
+    seriesFree(&newSeries);
+
+    // free memory
+    for (size_t i = 0; i < used; i++) {
+        free(arr[i].val);
+    }
+    free(arr);
+
     return result;
 }
 
@@ -1546,16 +1830,74 @@ double dfMax_impl(const DataFrame* df, size_t colIndex)
  * 9) Transpose
  * ------------------------------------------------------------------------- */
 
-DataFrame dfTranspose_impl(const DataFrame* df)
-{
-    DataFrame result;
-    DataFrame_Create(&result);
-    if (!df) return result;
-
-    // Implementation as per your snippet
-    // ...
-    return result;
-}
+ DataFrame dfTranspose_impl(const DataFrame* df)
+ {
+     DataFrame result;
+     DataFrame_Create(&result);
+     if (!df) return result;
+ 
+     size_t nCols = df->numColumns(df);
+     size_t nRows = df->numRows(df);
+ 
+     // We'll produce nRows columns in result
+     for (size_t r = 0; r < nRows; r++) {
+         // 1) Build a name on stack
+         char tempName[64];
+         snprintf(tempName, sizeof(tempName), "Row#%zu", r);
+ 
+         // 2) Instead of passing the stack array to seriesInit, do:
+         Series col;
+         seriesInit(&col, "", DF_STRING);  // start with an empty name
+         // Free the col.name if allocated, then replace with a heap copy of tempName
+         free(col.name);
+         col.name = strdup(tempName);  // dynamic copy
+ 
+         // Now fill col with nCols entries (all strings)
+         for (size_t c = 0; c < nCols; c++) {
+             const Series* orig = df->getSeries(df, c);
+             if (!orig) {
+                 seriesAddString(&col, "???");
+                 continue;
+             }
+             switch(orig->type) {
+                 case DF_INT: {
+                     int v;
+                     if (seriesGetInt(orig, r, &v)) {
+                         char buf[32];
+                         snprintf(buf, sizeof(buf), "%d", v);
+                         seriesAddString(&col, buf);
+                     } else {
+                         seriesAddString(&col, "NA");
+                     }
+                 } break;
+                 case DF_DOUBLE: {
+                     double d;
+                     if (seriesGetDouble(orig, r, &d)) {
+                         char buf[64];
+                         snprintf(buf, sizeof(buf), "%g", d);
+                         seriesAddString(&col, buf);
+                     } else {
+                         seriesAddString(&col, "NA");
+                     }
+                 } break;
+                 case DF_STRING: {
+                     char* str = NULL;
+                     if (seriesGetString(orig, r, &str)) {
+                         seriesAddString(&col, str);
+                         free(str);
+                     } else {
+                         seriesAddString(&col, "NA");
+                     }
+                 } break;
+             }
+         }
+         // Add to result
+         result.addSeries(&result, &col);
+         seriesFree(&col);  // result keeps its own copy
+     }
+     return result;
+ }
+ 
 
 /* -------------------------------------------------------------------------
  * 10) Searching / IndexOf
@@ -1681,12 +2023,282 @@ DataFrame dfWhere_impl(const DataFrame* df, RowPredicate predicate, double defau
     return result;
 }
 
+
+
+/**
+ * dfExplode_impl
+ * 
+ * If the column at `colIndex` is DF_STRING, we treat each cell as a comma-separated list.
+ * We create multiple rows, one per list item. Other columns replicate the same row data.
+ * If colIndex is invalid or not DF_STRING, we return a copy of the original DF (no explosion).
+ */
+
+/**
+ * We'll create a small struct to hold, for each original row:
+ *  - all other columns' data as strings
+ *  - the "explode" column's data split into items subItems[]
+ */
+typedef struct {
+    char** otherCols;     // array of string data for nCols columns, but for colIndex we store NULL
+    size_t subCount;      // how many splitted items from the explode column
+    char** subItems;      // subCount items
+} ExplodeRow;
+
+/**
+ * We'll define a helper to read a cell in `Series s` at row r, convert it to string (for numeric), or copy it if DF_STRING.
+ */
+static char* _cellToString(const Series* s, size_t rowIndex)
+{
+    if (!s) return strdup("");
+    char buffer[128];
+    buffer[0] = '\0';
+
+    switch (s->type) {
+        case DF_INT: {
+            int iv;
+            if (seriesGetInt(s, rowIndex, &iv)) {
+                snprintf(buffer, sizeof(buffer), "%d", iv);
+            }
+        } break;
+        case DF_DOUBLE: {
+            double dv;
+            if (seriesGetDouble(s, rowIndex, &dv)) {
+                snprintf(buffer, sizeof(buffer), "%g", dv);
+            }
+        } break;
+        case DF_STRING: {
+            char* st = NULL;
+            if (seriesGetString(s, rowIndex, &st)) {
+                // copy into buffer if it fits
+                strncpy(buffer, st, sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
+                free(st);
+            }
+        } break;
+    }
+    // Return a heap-allocated copy
+    return strdup(buffer);
+}
+
+/**
+ * We'll define a function to copy the entire DF if colIndex is invalid or not string.
+ */
+static DataFrame copyEntireDF(const DataFrame* df)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df) return result;
+
+    size_t nCols = df->numColumns(df);
+    size_t nRows = df->numRows(df);
+
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* s = df->getSeries(df, c);
+        if (!s) continue;
+
+        Series newS;
+        seriesInit(&newS, s->name, s->type);
+
+        for (size_t r = 0; r < nRows; r++) {
+            switch (s->type) {
+                case DF_INT: {
+                    int val;
+                    if (seriesGetInt(s, r, &val)) {
+                        seriesAddInt(&newS, val);
+                    }
+                } break;
+                case DF_DOUBLE: {
+                    double dv;
+                    if (seriesGetDouble(s, r, &dv)) {
+                        seriesAddDouble(&newS, dv);
+                    }
+                } break;
+                case DF_STRING: {
+                    char* st = NULL;
+                    if (seriesGetString(s, r, &st)) {
+                        seriesAddString(&newS, st);
+                        free(st);
+                    }
+                } break;
+            }
+        }
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+    return result;
+}
+
+/**
+ * dfExplode_impl
+ * 
+ * If the column at `colIndex` is DF_STRING, we treat each cell as a comma-separated list.
+ * We create multiple rows, one per list item. Other columns replicate the same row data.
+ * If colIndex is invalid or not DF_STRING, we return a copy of the original DF (no explosion).
+ */
 DataFrame dfExplode_impl(const DataFrame* df, size_t colIndex)
 {
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
 
-    // STUB
+    size_t nCols = df->numColumns(df);
+    if (colIndex >= nCols) {
+        // invalid => just copy entire DF
+        return copyEntireDF(df);
+    }
+
+    const Series* explodeSer = df->getSeries(df, colIndex);
+    if (!explodeSer) {
+        // no data => copy
+        return copyEntireDF(df);
+    }
+    if (explodeSer->type != DF_STRING) {
+        // not a string => no explosion
+        return copyEntireDF(df);
+    }
+
+    // We'll store an array of ExplodeRow for each row in df. 
+    // Then build the final DF from that.
+    size_t nRows = df->numRows(df);
+    ExplodeRow* rows = (ExplodeRow*)calloc(nRows, sizeof(ExplodeRow));
+
+    // First pass: read each original row => gather "otherCols" and parse the explode col
+    for (size_t r = 0; r < nRows; r++) {
+        rows[r].otherCols = (char**)calloc(nCols, sizeof(char*));
+        // fill otherCols
+        for (size_t c = 0; c < nCols; c++) {
+            if (c == colIndex) {
+                rows[r].otherCols[c] = NULL; // we'll parse separately
+                continue;
+            }
+            // convert cell to string
+            const Series* s = df->getSeries(df, c);
+            rows[r].otherCols[c] = _cellToString(s, r);
+        }
+
+        // parse colIndex
+        char* mainStr = NULL;
+        if (seriesGetString(explodeSer, r, &mainStr)) {
+            if (!mainStr || !mainStr[0]) {
+                // empty => subCount=1 => [""]
+                rows[r].subCount = 1;
+                rows[r].subItems = (char**)calloc(1, sizeof(char*));
+                rows[r].subItems[0] = strdup("");
+                if (mainStr) free(mainStr);
+            } else {
+                // naive split on commas
+                size_t sc = 1;
+                for (char* p = mainStr; *p; p++) {
+                    if (*p == ',') sc++;
+                }
+                rows[r].subCount = sc;
+                rows[r].subItems = (char**)calloc(sc, sizeof(char*));
+
+                // do an in-place split on mainStr
+                size_t idx = 0;
+                char* tok = strtok(mainStr, ",");
+                while (tok) {
+                    rows[r].subItems[idx] = strdup(tok);
+                    idx++;
+                    tok = strtok(NULL, ",");
+                }
+                free(mainStr);
+            }
+        } else {
+            // seriesGetString => false => no data => treat as empty
+            rows[r].subCount = 1;
+            rows[r].subItems = (char**)calloc(1, sizeof(char*));
+            rows[r].subItems[0] = strdup("");
+        }
+    }
+
+    // Next, we know how many new rows we'll produce: sum of all subCounts
+    // We'll build an array of Series for the final DF, one for each column. 
+    // For colIndex => DF_STRING. Others => same type as original.
+
+    Series* outCols = (Series*)calloc(nCols, sizeof(Series));
+    // initialize them
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* orig = df->getSeries(df, c);
+        if (!orig) {
+            // fallback
+            seriesInit(&outCols[c], "unknown", DF_STRING);
+            continue;
+        }
+        if (c == colIndex) {
+            // the "exploded" col is forced DF_STRING
+            seriesInit(&outCols[c], orig->name, DF_STRING);
+        } else {
+            // same type
+            seriesInit(&outCols[c], orig->name, orig->type);
+        }
+    }
+
+    // Fill the new rows
+    for (size_t r = 0; r < nRows; r++) {
+        // for each sub item
+        for (size_t s = 0; s < rows[r].subCount; s++) {
+            // build 1 new row
+            for (size_t c = 0; c < nCols; c++) {
+                if (c == colIndex) {
+                    // sub item => DF_STRING
+                    seriesAddString(&outCols[c], rows[r].subItems[s]);
+                } else {
+                    // parse rows[r].otherCols[c] back to the original type
+                    const Series* orig = df->getSeries(df, c);
+                    if (!orig) {
+                        // fallback
+                        if (outCols[c].type == DF_STRING) {
+                            seriesAddString(&outCols[c], "");
+                        } else if (outCols[c].type == DF_INT) {
+                            seriesAddInt(&outCols[c], 0);
+                        } else {
+                            seriesAddDouble(&outCols[c], 0.0);
+                        }
+                        continue;
+                    }
+
+                    switch (orig->type) {
+                        case DF_INT: {
+                            int vi = atoi(rows[r].otherCols[c]);
+                            seriesAddInt(&outCols[c], vi);
+                        } break;
+                        case DF_DOUBLE: {
+                            double vd = atof(rows[r].otherCols[c]);
+                            seriesAddDouble(&outCols[c], vd);
+                        } break;
+                        case DF_STRING: {
+                            seriesAddString(&outCols[c], rows[r].otherCols[c]);
+                        } break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Attach outCols to result
+    for (size_t c = 0; c < nCols; c++) {
+        result.addSeries(&result, &outCols[c]);
+        seriesFree(&outCols[c]);
+    }
+    free(outCols);
+
+    // free the rows data
+    for (size_t r = 0; r < nRows; r++) {
+        // free otherCols
+        for (size_t c = 0; c < nCols; c++) {
+            if (c == colIndex) continue; 
+            free(rows[r].otherCols[c]);
+        }
+        free(rows[r].otherCols);
+
+        // free subItems
+        for (size_t s = 0; s < rows[r].subCount; s++) {
+            free(rows[r].subItems[s]);
+        }
+        free(rows[r].subItems);
+    }
+    free(rows);
+
     return result;
 }

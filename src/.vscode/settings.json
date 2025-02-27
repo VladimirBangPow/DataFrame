@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "stdlib.h": "c",
-        "dataframe.h": "c"
+        "dataframe.h": "c",
+        "dataframe_query_test.h": "c",
+        "series.h": "c"
     }
 }
