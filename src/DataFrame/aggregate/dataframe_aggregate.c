@@ -1,0 +1,10 @@
+//GroupBy
+//Sum
+//Min
+//Max
+//Mean
+//Count
+//Median
+//Stddev
+//Variance
+//quantiles

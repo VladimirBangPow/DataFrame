@@ -10,6 +10,7 @@ SRC = \
 	DataFrame/plot/dataframe_plot.c DataFrame/plot/dataframe_plot_test.c \
 	DataFrame/date/dataframe_date.c DataFrame/date/dataframe_date_test.c \
 	DataFrame/indexing/dataframe_indexing.c DataFrame/indexing/dataframe_indexing_test.c \
+	DataFrame/combine/dataframe_combine.c DataFrame/combine/dataframe_combine_test.c \
 	Series/series.c \
 	../../DataStructures/src/DynamicArray/dynamic_array.c
 

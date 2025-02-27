@@ -61,6 +61,19 @@ typedef DataFrame (*DataFrameInsertFunc)(DataFrame* df, size_t colIndex, const S
 typedef DataFrame (*DataFrameIndexFunc)(const DataFrame* df);
 typedef DataFrame (*DataFrameColumnsFunc)(const DataFrame* df);
 
+
+//Combining
+typedef enum {
+    JOIN_INNER,
+    JOIN_LEFT,
+    JOIN_RIGHT
+} JoinType;
+
+typedef DataFrame (*DataFrameConcatFunc)(const DataFrame*, const DataFrame*);
+typedef DataFrame (*DataFrameMergeFunc)(const DataFrame*, const DataFrame*, const char*, const char*);
+typedef DataFrame (*DataFrameJoinFunc)(const DataFrame*, const DataFrame*, const char*, const char*, JoinType);
+
+
 /* 
    For filtering, we need the RowPredicate we defined above:
 */
@@ -164,6 +177,11 @@ struct DataFrame {
     DataFrameInsertFunc            insert;
     DataFrameIndexFunc             index;
     DataFrameColumnsFunc           cols;
+
+    /* Combining */
+    DataFrameConcatFunc             concat;
+    DataFrameMergeFunc              merge;
+    DataFrameJoinFunc               join;
 
     /* IO / Plotting / Conversion */
     DataFramePrintFunc             print;

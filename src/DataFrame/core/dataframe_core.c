@@ -61,6 +61,11 @@ extern DataFrame dfInsert_impl(DataFrame* df, size_t colIndex, const Series* s);
 extern DataFrame dfIndex_impl(const DataFrame* df);
 extern DataFrame dfColumns_impl(const DataFrame* df);
 
+extern DataFrame dfConcat_impl(const DataFrame*, const DataFrame*);
+extern DataFrame dfMerge_impl(const DataFrame*, const DataFrame*, const char*, const char*);
+extern DataFrame dfJoin_impl(const DataFrame*, const DataFrame*, const char*, const char*, JoinType);
+
+
 /* Other non-query methods: */
 extern void dfPrint_impl(const DataFrame* df);
 extern bool readCsv_impl(DataFrame* df, const char* filename);
@@ -262,6 +267,11 @@ void DataFrame_Create(DataFrame* df)
     df->readCsv      = readCsv_impl;
     df->plot         = dfPlot_impl;
     df->convertDatesToEpoch = dfConvertDatesToEpoch_impl;
+
+    // Combining:
+    df->concat       = dfConcat_impl;
+    df->merge        = dfMerge_impl;
+    df->join         = dfJoin_impl;
 
     // Finally, call init
     df->init(df);

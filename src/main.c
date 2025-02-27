@@ -7,6 +7,7 @@
 #include "./DataFrame/plot/dataframe_plot_test.h"
 #include "./DataFrame/date/dataframe_date_test.h"
 #include "./DataFrame/indexing/dataframe_indexing_test.h"
+#include "./DataFrame/combine/dataframe_combine_test.h"
 int main(void)
 {
     testCore();
@@ -16,5 +17,6 @@ int main(void)
     testDate();
     testPlot();
     testIndexing();
+    testCombine();
     return 0;
 }
