@@ -5,6 +5,8 @@
         "dataframe_query_test.h": "c",
         "series.h": "c",
         "stdbool.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "dataframe_reshape_test.h": "c",
+        "dataframe_combine_test.h": "c"
     }
 }

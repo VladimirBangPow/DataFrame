@@ -6,11 +6,12 @@ SRC = \
 	DataFrame/core/dataframe_core.c DataFrame/core/dataframe_core_test.c \
 	DataFrame/query/dataframe_query.c DataFrame/query/dataframe_query_test.c \
 	DataFrame/print/dataframe_print.c DataFrame/print/dataframe_print_test.c \
-	DataFrame/csv/dataframe_csv.c DataFrame/csv/dataframe_csv_test.c \
+	DataFrame/io/dataframe_io.c DataFrame/io/dataframe_io_test.c \
 	DataFrame/plot/dataframe_plot.c DataFrame/plot/dataframe_plot_test.c \
 	DataFrame/date/dataframe_date.c DataFrame/date/dataframe_date_test.c \
 	DataFrame/indexing/dataframe_indexing.c DataFrame/indexing/dataframe_indexing_test.c \
 	DataFrame/combine/dataframe_combine.c DataFrame/combine/dataframe_combine_test.c \
+	DataFrame/reshape/dataframe_reshape.c DataFrame/reshape/dataframe_reshape_test.c \
 	Series/series.c \
 	../../DataStructures/src/DynamicArray/dynamic_array.c
 

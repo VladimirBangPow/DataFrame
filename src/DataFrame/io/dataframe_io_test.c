@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "dataframe_csv_test.h"
+#include "dataframe_io_test.h"
 #include "../dataframe.h"    // for DataFrame struct, df->readCsv, etc.
 #include "../../Series/series.h"           // for creating Series
 
@@ -223,13 +223,13 @@ static void testReadingLargeCsv(void)
 }
 
 /**
- * @brief testCsv
- * Main test driver for dataframe_csv (df.readCsv).
+ * @brief testIO
+ * Main test driver for dataframe_io (df.readCsv).
  * Calls all sub-tests.
  */
-void testCsv(void)
+void testIO(void)
 {
-    printf("Running DataFrame CSV tests...\n");
+    printf("Running DataFrame IO tests...\n");
 
     testReadingSmallCsv();
     printf(" - Small CSV test passed.\n");
@@ -243,5 +243,5 @@ void testCsv(void)
     testReadingLargeCsv();
     printf(" - Large CSV stress test passed.\n");
 
-    printf("All dataframe_csv tests passed successfully!\n");
+    printf("All dataframe_io tests passed successfully!\n");
 }
