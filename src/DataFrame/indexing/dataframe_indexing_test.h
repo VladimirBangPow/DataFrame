@@ -1,0 +1,6 @@
+#ifndef DATAFRAME_INDEXING_TEST_H
+#define DATAFRAME_INDEXING_TEST_H
+
+void testIndexing(void);
+
+#endif // DATAFRAME_INDEXING_TEST_H

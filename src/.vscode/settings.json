@@ -3,6 +3,8 @@
         "stdlib.h": "c",
         "dataframe.h": "c",
         "dataframe_query_test.h": "c",
-        "series.h": "c"
+        "series.h": "c",
+        "stdbool.h": "c",
+        "string.h": "c"
     }
 }

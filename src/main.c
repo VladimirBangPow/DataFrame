@@ -6,6 +6,7 @@
 #include "./DataFrame/csv/dataframe_csv_test.h"
 #include "./DataFrame/plot/dataframe_plot_test.h"
 #include "./DataFrame/date/dataframe_date_test.h"
+#include "./DataFrame/indexing/dataframe_indexing_test.h"
 int main(void)
 {
     testCore();
@@ -14,5 +15,6 @@ int main(void)
     testCsv();
     testDate();
     testPlot();
+    testIndexing();
     return 0;
 }

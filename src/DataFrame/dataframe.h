@@ -50,6 +50,17 @@ typedef DataFrame (*DataFrameSelectColumnsFunc)(const DataFrame* df, const size_
 typedef DataFrame (*DataFrameDropColumnsFunc)(const DataFrame* df, const size_t* dropIndices, size_t dropCount);
 typedef DataFrame (*DataFrameRenameColumnsFunc)(const DataFrame* df, const char** oldNames, const char** newNames, size_t count);
 
+/*Indexing-like methods*/
+typedef DataFrame (*DataFrameAtFunc)(const DataFrame* df, size_t rowIndex, const char* colName);
+typedef DataFrame (*DataFrameIatFunc)(const DataFrame* df, size_t rowIndex, size_t colIndex);
+typedef DataFrame (*DataFrameLocFunc)(const DataFrame* df, const size_t* rowIndices, size_t rowCount, const char* const* colNames, size_t colCount);
+typedef DataFrame (*DataFrameIlocFunc)(const DataFrame* df, size_t rowStart, size_t rowEnd, const size_t* colIndices, size_t colCount);
+typedef DataFrame (*DataFrameDropFunc)(const DataFrame* df, const char* const* colNames, size_t nameCount);
+typedef DataFrame (*DataFramePopFunc)(const DataFrame* df, const char* colName, DataFrame* poppedColDF);
+typedef DataFrame (*DataFrameInsertFunc)(DataFrame* df, size_t colIndex, const Series* s);
+typedef DataFrame (*DataFrameIndexFunc)(const DataFrame* df);
+typedef DataFrame (*DataFrameColumnsFunc)(const DataFrame* df);
+
 /* 
    For filtering, we need the RowPredicate we defined above:
 */
@@ -142,6 +153,17 @@ struct DataFrame {
     DataFrameApplyFunc             apply;
     DataFrameWhereFunc             where;
     DataFrameExplodeFunc           explode;
+
+    /* Indexing-like methods */
+    DataFrameAtFunc                at;
+    DataFrameIatFunc               iat;
+    DataFrameLocFunc               loc;
+    DataFrameIlocFunc              iloc;
+    DataFrameDropFunc              drop;
+    DataFramePopFunc               pop;
+    DataFrameInsertFunc            insert;
+    DataFrameIndexFunc             index;
+    DataFrameColumnsFunc           cols;
 
     /* IO / Plotting / Conversion */
     DataFramePrintFunc             print;

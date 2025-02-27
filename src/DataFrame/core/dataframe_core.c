@@ -51,6 +51,16 @@ extern DataFrame dfApply_impl(const DataFrame* df, RowFunction);
 extern DataFrame dfWhere_impl(const DataFrame* df, RowPredicate, double);
 extern DataFrame dfExplode_impl(const DataFrame* df, size_t colIndex);
 
+extern DataFrame dfAt_impl(const DataFrame* df, size_t rowIndex, const char* colName);
+extern DataFrame dfIat_impl(const DataFrame* df, size_t rowIndex, size_t colIndex);
+extern DataFrame dfLoc_impl(const DataFrame* df, const size_t* rowIndices, size_t rowCount, const char* const* colNames, size_t colCount);
+extern DataFrame dfIloc_impl(const DataFrame* df, size_t rowStart, size_t rowEnd, const size_t* colIndices, size_t colCount);
+extern DataFrame dfDrop_impl(const DataFrame* df, const char* const* colNames, size_t nameCount);
+extern DataFrame dfPop_impl(const DataFrame* df, const char* colName, DataFrame* poppedColDF);
+extern DataFrame dfInsert_impl(DataFrame* df, size_t colIndex, const Series* s);
+extern DataFrame dfIndex_impl(const DataFrame* df);
+extern DataFrame dfColumns_impl(const DataFrame* df);
+
 /* Other non-query methods: */
 extern void dfPrint_impl(const DataFrame* df);
 extern bool readCsv_impl(DataFrame* df, const char* filename);
@@ -235,6 +245,17 @@ void DataFrame_Create(DataFrame* df)
     df->apply        = dfApply_impl;
     df->where        = dfWhere_impl;
     df->explode      = dfExplode_impl;
+
+    // Indexing:
+    df->at           = dfAt_impl;
+    df->iat          = dfIat_impl;
+    df->loc          = dfLoc_impl;
+    df->iloc         = dfIloc_impl;
+    df->drop         = dfDrop_impl;
+    df->pop          = dfPop_impl;
+    df->insert       = dfInsert_impl;
+    df->index        = dfIndex_impl;
+    df->cols         = dfColumns_impl;
 
     // Printing / IO:
     df->print        = dfPrint_impl;
