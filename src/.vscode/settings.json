@@ -9,6 +9,8 @@
         "dataframe_reshape_test.h": "c",
         "dataframe_combine_test.h": "c",
         "__locale": "c",
-        "ios": "c"
+        "ios": "c",
+        "dataframe_aggregate_test.h": "c",
+        "dataframe_indexing_test.h": "c"
     }
 }

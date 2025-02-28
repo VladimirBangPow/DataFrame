@@ -39,6 +39,7 @@ typedef size_t (*DataFrameNumColumnsFunc)(const DataFrame* df);
 typedef size_t (*DataFrameNumRowsFunc)(const DataFrame* df);
 typedef const Series* (*DataFrameGetSeriesFunc)(const DataFrame* df, size_t colIndex);
 typedef bool   (*DataFrameAddRowFunc)(DataFrame* df, const void** rowData);
+typedef bool   (*DataFrameGetRowFunc)(const DataFrame* df, size_t rowIndex, void*** outRow);
 
 /* Query-like methods returning DataFrame subsets or transformations */
 typedef DataFrame (*DataFrameHeadFunc)(const DataFrame* df, size_t n);
@@ -135,7 +136,8 @@ struct DataFrame {
     DataFrameNumRowsFunc           numRows;
     DataFrameGetSeriesFunc         getSeries;
     DataFrameAddRowFunc            addRow;
-
+    DataFrameGetRowFunc            getRow;
+    
     /* Query methods returning new DataFrames */
     DataFrameHeadFunc              head;
     DataFrameTailFunc              tail;

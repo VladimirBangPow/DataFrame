@@ -12,7 +12,6 @@
 // Existing testCore prototypes:
 extern void testCore(void);
 
-// Already have testBasicAddSeriesAndRows() and testStress() in your code
 
 /**
  * Builds a small DF_DOUBLE Series for testing.
@@ -231,6 +230,80 @@ static void testAddRowWithDatetime(void)
     printf(" - testAddRowWithDatetime passed.\n");
 }
 
+static void testGetRow(void)
+{
+    // 1) Create a small DataFrame
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Let's have 3 columns: DF_INT, DF_STRING, DF_DATETIME
+    int intValues[] = { 100, 200, 300, 400 };
+    const char* strValues[] = { "alpha", "beta", "gamma", "delta" };
+    long long dtValues[] = { 1678000000LL, 1678000100LL, 1678000200LL, 1678000300LL };
+
+    Series colInt, colStr, colDT;
+    seriesInit(&colInt, "IntCol", DF_INT);
+    for (size_t i = 0; i < 4; i++) {
+        seriesAddInt(&colInt, intValues[i]);
+    }
+    seriesInit(&colStr, "StrCol", DF_STRING);
+    for (size_t i = 0; i < 4; i++) {
+        seriesAddString(&colStr, strValues[i]);
+    }
+    seriesInit(&colDT, "TimeCol", DF_DATETIME);
+    for (size_t i = 0; i < 4; i++) {
+        seriesAddDateTime(&colDT, dtValues[i]);
+    }
+
+    // 2) Add columns to the DataFrame
+    bool ok = df.addSeries(&df, &colInt);  assert(ok);
+    ok = df.addSeries(&df, &colStr);      assert(ok);
+    ok = df.addSeries(&df, &colDT);       assert(ok);
+
+    // (We can free local Series if we like, DataFrame holds its own copy)
+    seriesFree(&colInt);
+    seriesFree(&colStr);
+    seriesFree(&colDT);
+
+    // Check row/col count
+    assert(df.numColumns(&df) == 3);
+    assert(df.numRows(&df) == 4);
+
+    // 3) Test dfGetRow_impl on row 2 (zero-based => 3rd item)
+    void** rowData = NULL;
+    ok = df.getRow(&df, 2, &rowData);
+    assert(ok);
+    // rowData is now an array of 3 pointers, one per column
+
+    // col0 => DF_INT => rowData[0] is (int*)
+    int* pInt = (int*)rowData[0];
+    assert(pInt && *pInt == 300);
+
+    // col1 => DF_STRING => rowData[1] is (char*)
+    char* pStr = (char*)rowData[1];
+    assert(pStr && strcmp(pStr, "gamma") == 0);
+
+    // col2 => DF_DATETIME => rowData[2] is (long long*)
+    long long* pDT = (long long*)rowData[2];
+    assert(pDT && *pDT == 1678000200LL);
+
+    // Now free each pointer
+    for (size_t c = 0; c < 3; c++) {
+        free(rowData[c]);
+    }
+    free(rowData);
+
+    // 4) Check out-of-range row
+    // e.g. rowIndex=99 => should fail
+    void** badRowData = NULL;
+    ok = df.getRow(&df, 99, &badRowData);
+    assert(!ok); // should fail
+
+    // 5) Destroy the DataFrame
+    DataFrame_Destroy(&df);
+
+    printf(" - testGetRow passed.\n");
+}
 
 static void testConvertDatesToEpoch(void)
 {
@@ -294,7 +367,7 @@ static void testBasicAddSeriesAndRows(void)
     assert(df.numColumns(&df) == 1);
     assert(df.numRows(&df) == 3);  // matches series length
 
-    // seriesFree(&s1);  // we can free local copy, df has its own
+    seriesFree(&s1);  // we can free local copy, df has its own
 
     // Build a second column of 3 integers
     int v2[] = { 100, 200, 300 };
@@ -359,9 +432,9 @@ static void testStress(void)
     bool ok = df.addSeries(&df, &s1); assert(ok == true);
     ok = df.addSeries(&df, &s2);     assert(ok == true);
     ok = df.addSeries(&df, &s3);     assert(ok == true);
-    // seriesFree(&s1); // local copy
-    // seriesFree(&s2);
-    // seriesFree(&s3);
+    seriesFree(&s1); // local copy
+    seriesFree(&s2);
+    seriesFree(&s3);
     assert(df.numColumns(&df) == 3);
     assert(df.numRows(&df) == 0);
 
@@ -407,15 +480,9 @@ void testCore(void)
     printf("Running DataFrame core tests...\n");
     testDifferentColumnTypes();
     testAddRowWithDatetime();
+    testGetRow();
     testConvertDatesToEpoch();
-
     testBasicAddSeriesAndRows();
-    // printf(" - Basic addSeries/addRow tests passed.\n");
-
     testStress();
-    // printf(" - Stress test passed.\n");
-
-
-
     printf("All DataFrame core tests passed successfully!\n");
 }
