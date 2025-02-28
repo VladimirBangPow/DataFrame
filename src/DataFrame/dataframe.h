@@ -114,10 +114,43 @@ typedef void   (*DataFramePlotFunc)(const DataFrame* df,
                                     size_t yCount,
                                     const char* plotType,
                                     const char* outputFile);
-typedef bool   (*DataFrameConvertDatesToEpochFunc)(DataFrame* df,
+typedef bool   (*DataFrameConvertToDatetimeFunc)(DataFrame* df,
                                                    size_t dateColIndex,
                                                    const char* formatType,
                                                    bool toMillis);
+
+typedef bool  (*DataFrameDatetimeToStringFunc)(DataFrame* df, 
+                                                size_t dateColIndex, 
+                                                const char* outFormat,
+                                                bool storedAsMillis);
+
+typedef DataFrame  (*DataFrameDatetimeFilterFunc)(const DataFrame* df,
+                                            size_t dateColIndex,
+                                            long long startEpoch,
+                                            long long endEpoch);
+
+typedef bool  (*DataFrameDatetimeTruncateFunc)(DataFrame* df,
+                                                size_t colIndex,
+                                                const char* unit);
+typedef bool  (*DataFrameDatetimeAddFunc)(DataFrame* df,
+                                           size_t dateColIndex,
+                                           int daysToAdd);
+typedef DataFrame  (*DataFrameDatetimeDiffFunc)(const DataFrame* df,
+                                                size_t col1Index,
+                                                size_t col2Index,
+                                                const char* newColName);
+
+typedef DataFrame (*DataFrameDatetimeExtractFunc)(const DataFrame* df,
+                                                   size_t dateColIndex,
+                                                   const char* const* fields,
+                                                   size_t numFields);
+typedef DataFrame (*DataFrameDatetimeGroupByFunc)(const DataFrame* df, 
+                                                   size_t dateColIndex,
+                                                   const char* truncateUnit);
+typedef DataFrame (*DataFrameDatetimeValidateFunc)(const DataFrame* df,
+                                                    size_t colIndex,
+                                                    long long minEpoch,
+                                                    long long maxEpoch);
 
 /* -------------------------------------------------------------------------
  * The DataFrame struct itself
@@ -137,7 +170,7 @@ struct DataFrame {
     DataFrameGetSeriesFunc         getSeries;
     DataFrameAddRowFunc            addRow;
     DataFrameGetRowFunc            getRow;
-    
+
     /* Query methods returning new DataFrames */
     DataFrameHeadFunc              head;
     DataFrameTailFunc              tail;
@@ -189,7 +222,17 @@ struct DataFrame {
     DataFramePrintFunc             print;
     DataFrameReadCsvFunc           readCsv;
     DataFramePlotFunc              plot;
-    DataFrameConvertDatesToEpochFunc convertDatesToEpoch;
+
+    /* Date/Time */
+    DataFrameConvertToDatetimeFunc convertToDatetime;
+    DataFrameDatetimeToStringFunc  datetimeToString;
+    DataFrameDatetimeFilterFunc    datetimeFilter;
+    DataFrameDatetimeTruncateFunc  datetimeTruncate;
+    DataFrameDatetimeAddFunc       datetimeAdd;
+    DataFrameDatetimeDiffFunc      datetimeDiff;
+    DataFrameDatetimeExtractFunc   datetimeExtract;
+    DataFrameDatetimeGroupByFunc   datetimeGroupBy;
+    DataFrameDatetimeValidateFunc  datetimeValidate;
 };
 
 /* -------------------------------------------------------------------------

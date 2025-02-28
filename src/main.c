@@ -13,10 +13,11 @@
 int main(void)
 {
     testCore();
+    testDate();
+
     // testQuery();
     // testPrint();
     // testIO();
-    // testDate();
     // testPlot();
     // testIndexing();
     // testCombine();

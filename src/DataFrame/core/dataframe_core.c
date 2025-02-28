@@ -76,11 +76,49 @@ extern void dfPlot_impl(const DataFrame* df,
                         size_t yCount,
                         const char* plotType,
                         const char* outputFile);
-extern bool dfConvertDatesToEpoch_impl(DataFrame* df,
+
+/* Date/Time */
+extern bool dfConvertToDatetime_impl(DataFrame* df,
                                        size_t dateColIndex,
                                        const char* formatType,
                                        bool toMillis);
 
+extern bool dfDatetimeToString_impl(DataFrame* df, 
+                                        size_t dateColIndex, 
+                                        const char* outFormat,
+                                        bool storedAsMillis);  
+
+extern DataFrame dfDatetimeFilter_impl(const DataFrame* df,
+                                    size_t dateColIndex,
+                                    long long startEpoch,
+                                    long long endEpoch);  
+
+extern bool dfDatetimeTruncate_impl(DataFrame* df,
+                                    size_t colIndex,
+                                    const char* unit);
+
+
+extern bool dfDatetimeAdd_impl(DataFrame* df,
+                                size_t dateColIndex,
+                                int daysToAdd);
+
+extern DataFrame dfDatetimeDiff_impl(const DataFrame* df,
+                                    size_t col1Index,
+                                    size_t col2Index,
+                                    const char* newColName);
+
+extern DataFrame dfDatetimeExtract_impl(const DataFrame* df,
+                                        size_t dateColIndex,
+                                        const char* const* fields,
+                                        size_t numFields);
+extern DataFrame dfDatetimeGroupBy_impl(const DataFrame* df, 
+                                        size_t dateColIndex,
+                                        const char* truncateUnit);
+
+extern DataFrame dfDatetimeValidate_impl(const DataFrame* df,
+                                         size_t colIndex,
+                                         long long minEpoch,
+                                         long long maxEpoch);
 
 /* -------------------------------------------------------------------------
  * Core Implementation Functions
@@ -170,7 +208,18 @@ void DataFrame_Create(DataFrame* df)
     df->print        = dfPrint_impl;
     df->readCsv      = readCsv_impl;
     df->plot         = dfPlot_impl;
-    df->convertDatesToEpoch = dfConvertDatesToEpoch_impl;
+
+    //Date/Time:
+    df->convertToDatetime = dfConvertToDatetime_impl;
+    df->datetimeToString  = dfDatetimeToString_impl;
+    df->datetimeFilter    = dfDatetimeFilter_impl;
+    df->datetimeTruncate  = dfDatetimeTruncate_impl;
+    df->datetimeAdd       = dfDatetimeAdd_impl;
+    df->datetimeDiff      = dfDatetimeDiff_impl;
+    df->datetimeExtract   = dfDatetimeExtract_impl;
+    df->datetimeGroupBy   = dfDatetimeGroupBy_impl;
+    df->datetimeValidate  = dfDatetimeValidate_impl;
+
 
     // Combining:
     df->concat       = dfConcat_impl;
