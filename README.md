@@ -1,2 +1,7 @@
 # DataFrame
-Pandas like data frames in C
+
+## Core:
+
+### AddSeries
+
+![AddSeries](diagrams/AddSeries.png "AddSeries")
