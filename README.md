@@ -1,4 +1,4 @@
-# DataFrame
+# DataFrame::Core
 
 
 # Core::void Dataframe_Create(DataFrame* df)
@@ -33,7 +33,11 @@
 ![NRows](diagrams/NRows.png "NRows")
 
 
-# DATE::convertDatesToEpoch(DataFrame* df, size_t dateColIndex, const char* formatType, bool toMillis)
+
+
+# DataFrame::Date
+
+# Date::convertDatesToEpoch(DataFrame* df, size_t dateColIndex, const char* formatType, bool toMillis)
 | **Original Column Type** | **Example Cell Value (input)** | **formatType**                 | **toMillis?** | **Action**                                                                                    | **Final Column Type**        | **Example Output Value**                                               |
 |--------------------------|--------------------------------|--------------------------------|--------------|------------------------------------------------------------------------------------------------|------------------------------|---------------------------------------------------------------------------|
 | **DF_INT**              | `20230301` (integer)           | `"YYYYMMDD"`                   | `false`      | Interprets `20230301` as “YYYY=2023, MM=03, DD=01” → parse → epoch seconds                     | **DF_INT** (overwritten)     | e.g. `1677628800` (seconds)                                            |
