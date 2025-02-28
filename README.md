@@ -11,17 +11,14 @@
 ![AddSeries](diagrams/addSeries.png "AddSeries")
 
 
-### size_t df.numColumns(const DataFrame* df)
-![NColumns](diagrams/NColumns.png "NColumns")
-
-
-### size_t df.numRows(const DataFrame *df)
-![NRows](diagrams/NRows.png "NRows")
-
-
 
 ### const Series* df.getSeries(const DataFrame* df, size_t colIndex)
 ![GetSeries](diagrams/GetSeries.png "GetSeries")
+
+
+### size_t df.numColumns(const DataFrame* df)
+![NColumns](diagrams/NColumns.png "NColumns")
+
 
 
 ### bool df.addRow(DataFrame* df, const void** rowData)
@@ -31,3 +28,7 @@
 
 ### bool df.getRow(DataFrame* df, size_t rowIndex, void** outRow)
 ![GetRow](diagrams/GetRow.png "GetRow")
+
+
+### size_t df.numRows(const DataFrame *df)
+![NRows](diagrams/NRows.png "NRows")
