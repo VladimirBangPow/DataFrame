@@ -16,33 +16,36 @@
  */
 
  /** parseYYYYMMDD: same as your original code */
-static time_t parseYYYYMMDD(double num)
-{
-    int dateVal = (int)num;
-    if (dateVal <= 10000101) {
-        return -1;
-    }
-    int year  = dateVal / 10000;
-    int month = (dateVal / 100) % 100;
-    int day   = dateVal % 100;
-
-    struct tm tinfo;
-    memset(&tinfo, 0, sizeof(tinfo));
-
-    tinfo.tm_year = year - 1900;
-    tinfo.tm_mon  = month - 1;
-    tinfo.tm_mday = day;
-    tinfo.tm_hour = 0;
-    tinfo.tm_min  = 0;
-    tinfo.tm_sec  = 0;
-    tinfo.tm_isdst= -1;
-
-    time_t seconds = mktime(&tinfo);
-    if (seconds == -1) {
-        return -1;
-    }
-    return seconds;
-}
+ static time_t parseYYYYMMDD(double num)
+ {
+     int dateVal = (int)num;
+     if (dateVal <= 10000101) {
+         return -1;
+     }
+     int year  = dateVal / 10000;
+     int month = (dateVal / 100) % 100;
+     int day   = dateVal % 100;
+ 
+     struct tm tinfo;
+     memset(&tinfo, 0, sizeof(tinfo));
+ 
+     tinfo.tm_year = year - 1900;  // e.g. 2023 => 123
+     tinfo.tm_mon  = month - 1;    // 1..12 => 0..11
+     tinfo.tm_mday = day;
+     tinfo.tm_hour = 0;
+     tinfo.tm_min  = 0;
+     tinfo.tm_sec  = 0;
+     tinfo.tm_isdst= -1;
+ 
+     // Use timegm (GNU extension) to interpret the struct tm as UTC
+     time_t seconds = timegm(&tinfo); // instead of mktime(&tinfo)
+ 
+     if (seconds == (time_t)-1) {
+         return -1;
+     }
+     return seconds;
+ }
+ 
 
 static long long parseEpochSec(const char* strVal, const char* formatType)
 {
