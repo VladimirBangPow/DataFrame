@@ -17,7 +17,6 @@
 //Variance
 //quantiles
 
-
 /* -------------------------------------------------------------------------
  * Grouping / Aggregation
  * ------------------------------------------------------------------------- */
@@ -31,10 +30,7 @@ typedef struct {
 } GroupItem;
 
 /**
- * We'll keep 'items', 'size', 'capacity' as file-static or 
- * pass them around as parameters. 
- * Typically you'd store them in a struct. 
- * We'll do the latter here: a GroupContext.
+ * We'll keep 'items', 'size', 'capacity' in a GroupContext.
  */
 typedef struct {
     GroupItem* items;
@@ -44,7 +40,7 @@ typedef struct {
 
 /**
  * @brief ensureCapacity
- * Helper to expand the dynamic array if needed.
+ * Expand dynamic array if needed.
  */
 static void ensureCapacity(GroupContext* ctx)
 {
@@ -58,7 +54,6 @@ static void ensureCapacity(GroupContext* ctx)
 /**
  * @brief findOrCreateItem
  *  Linear search for 'key', or create a new item with count=0.
- *  Returns pointer to the found or newly-created GroupItem.
  */
 static GroupItem* findOrCreateItem(GroupContext* ctx, const char* key)
 {
@@ -134,6 +129,15 @@ DataFrame dfGroupBy_impl(const DataFrame* df, size_t groupColIndex)
                     free(str);
                 }
             } break;
+            /* --------------------------------------------
+             * NEW: DF_DATETIME => convert epoch to string
+             * -------------------------------------------- */
+            case DF_DATETIME: {
+                long long dtVal;
+                if (seriesGetDateTime(groupSeries, r, &dtVal)) {
+                    snprintf(buffer, sizeof(buffer), "%lld", dtVal);
+                }
+            } break;
         }
 
         // find or create item
@@ -175,105 +179,191 @@ DataFrame dfGroupBy_impl(const DataFrame* df, size_t groupColIndex)
  * Simple Aggregations (dfSum, dfMean, dfMin, dfMax)
  * ------------------------------------------------------------------------- */
 
- double dfSum_impl(const DataFrame* df, size_t colIndex)
- {
-     // Implementation same as your snippet
-     if (!df) return 0.0;
-     const Series* s = df->getSeries(df, colIndex);
-     if (!s) return 0.0;
-     double sumVal = 0.0;
-     size_t nRows = seriesSize(s);
-     if (s->type == DF_INT) {
-         for (size_t r = 0; r < nRows; r++) {
-             int v;
-             if (seriesGetInt(s, r, &v)) {
-                 sumVal += v;
-             }
-         }
-     }
-     else if (s->type == DF_DOUBLE) {
-         for (size_t r = 0; r < nRows; r++) {
-             double d;
-             if (seriesGetDouble(s, r, &d)) {
-                 sumVal += d;
-             }
-         }
-     }
-     return sumVal;
- }
- 
- double dfMean_impl(const DataFrame* df, size_t colIndex)
- {
-     if (!df) return 0.0;
-     const Series* s = df->getSeries(df, colIndex);
-     if (!s) return 0.0;
-     size_t n = seriesSize(s);
-     if (n == 0) return 0.0;
-     double total = dfSum_impl(df, colIndex);
-     return total / n;
- }
- 
- double dfMin_impl(const DataFrame* df, size_t colIndex)
- {
-     if (!df) return 0.0;
-     const Series* s = df->getSeries(df, colIndex);
-     if (!s) return 0.0;
-     size_t n = seriesSize(s);
-     if (n == 0) return 0.0;
- 
-     double minVal = 0.0;
-     if (s->type == DF_INT) {
-         int tmp;
-         seriesGetInt(s, 0, &tmp);
-         minVal = (double)tmp;
-         for (size_t r = 1; r < n; r++) {
-             if (seriesGetInt(s, r, &tmp)) {
-                 if (tmp < minVal) minVal = tmp;
-             }
-         }
-     }
-     else if (s->type == DF_DOUBLE) {
-         double d;
-         seriesGetDouble(s, 0, &d);
-         minVal = d;
-         for (size_t r = 1; r < n; r++) {
-             if (seriesGetDouble(s, r, &d)) {
-                 if (d < minVal) minVal = d;
-             }
-         }
-     }
-     return minVal;
- }
- 
- double dfMax_impl(const DataFrame* df, size_t colIndex)
- {
-     if (!df) return 0.0;
-     const Series* s = df->getSeries(df, colIndex);
-     if (!s) return 0.0;
-     size_t n = seriesSize(s);
-     if (n == 0) return 0.0;
- 
-     double maxVal = 0.0;
-     if (s->type == DF_INT) {
-         int tmp;
-         seriesGetInt(s, 0, &tmp);
-         maxVal = (double)tmp;
-         for (size_t r = 1; r < n; r++) {
-             if (seriesGetInt(s, r, &tmp)) {
-                 if (tmp > maxVal) maxVal = tmp;
-             }
-         }
-     }
-     else if (s->type == DF_DOUBLE) {
-         double d;
-         seriesGetDouble(s, 0, &d);
-         maxVal = d;
-         for (size_t r = 1; r < n; r++) {
-             if (seriesGetDouble(s, r, &d)) {
-                 if (d > maxVal) maxVal = d;
-             }
-         }
-     }
-     return maxVal;
- }
- 
+double dfSum_impl(const DataFrame* df, size_t colIndex)
+{
+    if (!df) return 0.0;
+    const Series* s = df->getSeries(df, colIndex);
+    if (!s) return 0.0;
+
+    double sumVal = 0.0;
+    size_t nRows = seriesSize(s);
+
+    switch (s->type) {
+        case DF_INT: {
+            for (size_t r = 0; r < nRows; r++) {
+                int v;
+                if (seriesGetInt(s, r, &v)) {
+                    sumVal += v;
+                }
+            }
+        } break;
+        case DF_DOUBLE: {
+            for (size_t r = 0; r < nRows; r++) {
+                double d;
+                if (seriesGetDouble(s, r, &d)) {
+                    sumVal += d;
+                }
+            }
+        } break;
+        /* ----------------------------------------
+         * NEW: DF_DATETIME => treat epoch as double
+         * ----------------------------------------*/
+        case DF_DATETIME: {
+            for (size_t r = 0; r < nRows; r++) {
+                long long dtVal;
+                if (seriesGetDateTime(s, r, &dtVal)) {
+                    sumVal += (double)dtVal;
+                }
+            }
+        } break;
+        default:
+            break;
+    }
+    return sumVal;
+}
+
+double dfMean_impl(const DataFrame* df, size_t colIndex)
+{
+    if (!df) return 0.0;
+    const Series* s = df->getSeries(df, colIndex);
+    if (!s) return 0.0;
+
+    size_t n = seriesSize(s);
+    if (n == 0) return 0.0;
+
+    double total = dfSum_impl(df, colIndex);
+    return total / (double)n;
+}
+
+double dfMin_impl(const DataFrame* df, size_t colIndex)
+{
+    if (!df) return 0.0;
+    const Series* s = df->getSeries(df, colIndex);
+    if (!s) return 0.0;
+
+    size_t n = seriesSize(s);
+    if (n == 0) return 0.0;
+
+    double minVal = 0.0;
+
+    switch (s->type) {
+        case DF_INT: {
+            int tmp;
+            // initialize from row 0
+            if (!seriesGetInt(s, 0, &tmp)) {
+                return 0.0;
+            }
+            minVal = (double)tmp;
+            for (size_t r = 1; r < n; r++) {
+                if (seriesGetInt(s, r, &tmp)) {
+                    if (tmp < minVal) {
+                        minVal = (double)tmp;
+                    }
+                }
+            }
+        } break;
+        case DF_DOUBLE: {
+            double d;
+            // initialize from row 0
+            if (!seriesGetDouble(s, 0, &d)) {
+                return 0.0;
+            }
+            minVal = d;
+            for (size_t r = 1; r < n; r++) {
+                if (seriesGetDouble(s, r, &d)) {
+                    if (d < minVal) {
+                        minVal = d;
+                    }
+                }
+            }
+        } break;
+        /* -----------------------------------
+         * NEW: DF_DATETIME => treat as double
+         * -----------------------------------*/
+        case DF_DATETIME: {
+            long long dtVal;
+            // init from row 0
+            if (!seriesGetDateTime(s, 0, &dtVal)) {
+                return 0.0;
+            }
+            double d = (double)dtVal;
+            minVal = d;
+            for (size_t r = 1; r < n; r++) {
+                if (seriesGetDateTime(s, r, &dtVal)) {
+                    d = (double)dtVal;
+                    if (d < minVal) {
+                        minVal = d;
+                    }
+                }
+            }
+        } break;
+        default:
+            break;
+    }
+    return minVal;
+}
+
+double dfMax_impl(const DataFrame* df, size_t colIndex)
+{
+    if (!df) return 0.0;
+    const Series* s = df->getSeries(df, colIndex);
+    if (!s) return 0.0;
+
+    size_t n = seriesSize(s);
+    if (n == 0) return 0.0;
+
+    double maxVal = 0.0;
+
+    switch (s->type) {
+        case DF_INT: {
+            int tmp;
+            if (!seriesGetInt(s, 0, &tmp)) {
+                return 0.0;
+            }
+            maxVal = (double)tmp;
+            for (size_t r = 1; r < n; r++) {
+                if (seriesGetInt(s, r, &tmp)) {
+                    if (tmp > maxVal) {
+                        maxVal = (double)tmp;
+                    }
+                }
+            }
+        } break;
+        case DF_DOUBLE: {
+            double d;
+            if (!seriesGetDouble(s, 0, &d)) {
+                return 0.0;
+            }
+            maxVal = d;
+            for (size_t r = 1; r < n; r++) {
+                if (seriesGetDouble(s, r, &d)) {
+                    if (d > maxVal) {
+                        maxVal = d;
+                    }
+                }
+            }
+        } break;
+        /* --------------------------------
+         * NEW: DF_DATETIME => treat numeric
+         * --------------------------------*/
+        case DF_DATETIME: {
+            long long dtVal;
+            if (!seriesGetDateTime(s, 0, &dtVal)) {
+                return 0.0;
+            }
+            double d = (double)dtVal;
+            maxVal = d;
+            for (size_t r = 1; r < n; r++) {
+                if (seriesGetDateTime(s, r, &dtVal)) {
+                    d = (double)dtVal;
+                    if (d > maxVal) {
+                        maxVal = d;
+                    }
+                }
+            }
+        } break;
+        default:
+            break;
+    }
+    return maxVal;
+}

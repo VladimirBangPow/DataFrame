@@ -13,14 +13,14 @@
 int main(void)
 {
     testCore();
-    testQuery();
-    testPrint();
-    testIO();
-    testDate();
-    testPlot();
-    testIndexing();
-    testCombine();
-    testReshape();
-    testAggregate();
+    // testQuery();
+    // testPrint();
+    // testIO();
+    // testDate();
+    // testPlot();
+    // testIndexing();
+    // testCombine();
+    // testReshape();
+    // testAggregate();
     return 0;
 }

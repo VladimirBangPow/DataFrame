@@ -11,14 +11,13 @@
 
 /**
  * @brief dfAt_impl
- * ...
- * (Your existing code unchanged)
  */
 DataFrame dfAt_impl(const DataFrame* df, size_t rowIndex, const char* colName)
 {
     DataFrame result;
     DataFrame_Create(&result);
     if (!df || !colName) return result;
+
     size_t nCols = df->numColumns(df);
     size_t foundCol = (size_t)-1;
     for (size_t c = 0; c < nCols; c++) {
@@ -28,9 +27,13 @@ DataFrame dfAt_impl(const DataFrame* df, size_t rowIndex, const char* colName)
             break;
         }
     }
-    if (foundCol == (size_t)-1) return result; // not found
+    if (foundCol == (size_t)-1) {
+        return result; // not found
+    }
     size_t nRows = df->numRows(df);
-    if (rowIndex >= nRows) return result; // out-of-range
+    if (rowIndex >= nRows) {
+        return result; // out-of-range
+    }
     const Series* origCol = df->getSeries(df, foundCol);
     if (!origCol) return result;
 
@@ -57,6 +60,15 @@ DataFrame dfAt_impl(const DataFrame* df, size_t rowIndex, const char* colName)
                 free(str);
             }
         } break;
+        /* --------------------------------------------------------
+         *  DF_DATETIME
+         * -------------------------------------------------------- */
+        case DF_DATETIME: {
+            long long dtVal;
+            if (seriesGetDateTime(origCol, rowIndex, &dtVal)) {
+                seriesAddDateTime(&newSeries, dtVal);
+            }
+        } break;
     }
 
     result.addSeries(&result, &newSeries);
@@ -67,14 +79,13 @@ DataFrame dfAt_impl(const DataFrame* df, size_t rowIndex, const char* colName)
 
 /**
  * @brief dfIat_impl
- * ...
- * (Your existing code unchanged)
  */
 DataFrame dfIat_impl(const DataFrame* df, size_t rowIndex, size_t colIndex)
 {
     DataFrame result;
     DataFrame_Create(&result);
     if (!df) return result;
+
     size_t nCols = df->numColumns(df);
     size_t nRows = df->numRows(df);
     if (colIndex >= nCols || rowIndex >= nRows) {
@@ -106,6 +117,15 @@ DataFrame dfIat_impl(const DataFrame* df, size_t rowIndex, size_t colIndex)
                 free(str);
             }
         } break;
+        /* --------------------------------------------------------
+         *  DF_DATETIME
+         * -------------------------------------------------------- */
+        case DF_DATETIME: {
+            long long dtVal;
+            if (seriesGetDateTime(origCol, rowIndex, &dtVal)) {
+                seriesAddDateTime(&newSeries, dtVal);
+            }
+        } break;
     }
 
     result.addSeries(&result, &newSeries);
@@ -115,8 +135,6 @@ DataFrame dfIat_impl(const DataFrame* df, size_t rowIndex, size_t colIndex)
 
 /**
  * @brief dfLoc_impl
- * ...
- * (Your existing code unchanged)
  */
 DataFrame dfLoc_impl(const DataFrame* df,
                      const size_t* rowIndices, 
@@ -176,6 +194,15 @@ DataFrame dfLoc_impl(const DataFrame* df,
                         free(str);
                     }
                 } break;
+                /* --------------------------------------------
+                 *  DF_DATETIME
+                 * -------------------------------------------- */
+                case DF_DATETIME: {
+                    long long dtVal;
+                    if (seriesGetDateTime(orig, realRow, &dtVal)) {
+                        seriesAddDateTime(&newSeries, dtVal);
+                    }
+                } break;
             }
         }
 
@@ -188,8 +215,6 @@ DataFrame dfLoc_impl(const DataFrame* df,
 
 /**
  * @brief dfIloc_impl
- * ...
- * (Your existing code unchanged)
  */
 DataFrame dfIloc_impl(const DataFrame* df,
                       size_t rowStart,
@@ -243,6 +268,15 @@ DataFrame dfIloc_impl(const DataFrame* df,
                         free(str);
                     }
                 } break;
+                /* --------------------------------------------
+                 *  DF_DATETIME
+                 * -------------------------------------------- */
+                case DF_DATETIME: {
+                    long long dtVal;
+                    if (seriesGetDateTime(orig, r, &dtVal)) {
+                        seriesAddDateTime(&newSeries, dtVal);
+                    }
+                } break;
             }
         }
         result.addSeries(&result, &newSeries);
@@ -257,11 +291,6 @@ DataFrame dfIloc_impl(const DataFrame* df,
 
 /**
  * @brief dfDrop_impl
- *  Similar to pandas' df.drop(labels=..., axis='columns'), 
- *  dropping columns by *name*.
- *  Return a new DataFrame minus those columns. 
- *  If a name doesn't exist, skip it. 
- *  For row dropping, you'd do filter or an expanded approach.
  */
 DataFrame dfDrop_impl(const DataFrame* df, const char* const* colNames, size_t nameCount)
 {
@@ -322,6 +351,15 @@ DataFrame dfDrop_impl(const DataFrame* df, const char* const* colNames, size_t n
                         free(str);
                     }
                 } break;
+                /* --------------------------------------------
+                 *  DF_DATETIME
+                 * -------------------------------------------- */
+                case DF_DATETIME: {
+                    long long dtVal;
+                    if (seriesGetDateTime(s, r, &dtVal)) {
+                        seriesAddDateTime(&newS, dtVal);
+                    }
+                } break;
             }
         }
         result.addSeries(&result, &newS);
@@ -334,10 +372,6 @@ DataFrame dfDrop_impl(const DataFrame* df, const char* const* colNames, size_t n
 
 /**
  * @brief dfPop_impl
- *  Like pandas' pop: remove a single column by name from DF, and *return* 
- *  that column as a separate 1-col DataFrame in *poppedColDF 
- *  (plus the returned DF no longer has that column).
- *  If colName not found, poppedColDF => empty, returned DF => same as original.
  */
 DataFrame dfPop_impl(const DataFrame* df, const char* colName, DataFrame* poppedColDF)
 {
@@ -367,12 +401,12 @@ DataFrame dfPop_impl(const DataFrame* df, const char* colName, DataFrame* popped
         const Series* s = df->getSeries(df, c);
         if (!s) continue;
 
-        // If c == foundIdx => that goes to *poppedColDF
         if (c == foundIdx) {
+            // Move this column to poppedColDF
             if (poppedColDF) {
-                // create the 1-col DF
                 Series poppedS;
                 seriesInit(&poppedS, s->name, s->type);
+
                 size_t nRows = seriesSize(s);
                 for (size_t r = 0; r < nRows; r++) {
                     switch (s->type) {
@@ -395,16 +429,25 @@ DataFrame dfPop_impl(const DataFrame* df, const char* colName, DataFrame* popped
                                 free(str);
                             }
                         } break;
+                        /* --------------------------------
+                         *  DF_DATETIME
+                         * -------------------------------- */
+                        case DF_DATETIME: {
+                            long long dtVal;
+                            if (seriesGetDateTime(s, r, &dtVal)) {
+                                seriesAddDateTime(&poppedS, dtVal);
+                            }
+                        } break;
                     }
                 }
                 poppedColDF->addSeries(poppedColDF, &poppedS);
                 seriesFree(&poppedS);
             }
-            // skip adding to 'result'
         } else {
-            // normal copy
+            // Copy to the result
             Series newS;
             seriesInit(&newS, s->name, s->type);
+
             size_t nRows = seriesSize(s);
             for (size_t r = 0; r < nRows; r++) {
                 switch (s->type) {
@@ -427,6 +470,15 @@ DataFrame dfPop_impl(const DataFrame* df, const char* colName, DataFrame* popped
                             free(str);
                         }
                     } break;
+                    /* --------------------------------
+                     *  DF_DATETIME
+                     * -------------------------------- */
+                    case DF_DATETIME: {
+                        long long dtVal;
+                        if (seriesGetDateTime(s, r, &dtVal)) {
+                            seriesAddDateTime(&newS, dtVal);
+                        }
+                    } break;
                 }
             }
             result.addSeries(&result, &newS);
@@ -439,10 +491,6 @@ DataFrame dfPop_impl(const DataFrame* df, const char* colName, DataFrame* popped
 
 /**
  * @brief dfInsert_impl
- *  Like pandas' df.insert(loc=pos, column=..., value=Series, ...).
- *  Insert a new column at integer position insertPos. 
- *  If insertPos >= #cols, we effectively append. 
- *  Return the new DF. 
  */
 DataFrame dfInsert_impl(const DataFrame* df, size_t insertPos, const Series* newCol)
 {
@@ -453,15 +501,11 @@ DataFrame dfInsert_impl(const DataFrame* df, size_t insertPos, const Series* new
     size_t nCols = df->numColumns(df);
     size_t nRows = df->numRows(df);
 
-    // If newCol->size != nRows, we either error out or skip? 
-    // Pandas will allow broadcasting. We'll just do a naive check:
+    // If DF has existing columns, ensure row count matches
     if (df->numColumns(df) > 0) {
-        // if DF has existing columns, ensure row count matches
         if (seriesSize(newCol) != nRows) {
             fprintf(stderr, "dfInsert_impl: newCol row mismatch, ignoring.\n");
             // Return copy of original DF
-            // or an empty? We'll do "just copy original" for now.
-            // If you want to broadcast, implement your logic here.
             for (size_t c = 0; c < nCols; c++) {
                 const Series* s = df->getSeries(df, c);
                 if (!s) continue;
@@ -490,6 +534,15 @@ DataFrame dfInsert_impl(const DataFrame* df, size_t insertPos, const Series* new
                                 free(str);
                             }
                         } break;
+                        /* -------------------------
+                         *  DF_DATETIME
+                         * ------------------------- */
+                        case DF_DATETIME: {
+                            long long dtVal;
+                            if (seriesGetDateTime(s, r, &dtVal)) {
+                                seriesAddDateTime(&copyS, dtVal);
+                            }
+                        } break;
                     }
                 }
                 result.addSeries(&result, &copyS);
@@ -498,7 +551,6 @@ DataFrame dfInsert_impl(const DataFrame* df, size_t insertPos, const Series* new
             return result;
         }
     }
-    // if DF is empty (0 columns), then nRows=0 or more, so we can still insert if row counts match or if zero
 
     // clamp insertPos
     if (insertPos > nCols) {
@@ -511,7 +563,7 @@ DataFrame dfInsert_impl(const DataFrame* df, size_t insertPos, const Series* new
             // Insert newCol here
             Series newCopy;
             seriesInit(&newCopy, newCol->name, newCol->type);
-            // copy data from newCol
+
             size_t cRows = seriesSize(newCol);
             for (size_t r = 0; r < cRows; r++) {
                 switch (newCol->type) {
@@ -534,22 +586,30 @@ DataFrame dfInsert_impl(const DataFrame* df, size_t insertPos, const Series* new
                             free(str);
                         }
                     } break;
+                    /* ----------------------------
+                     *  DF_DATETIME
+                     * ---------------------------- */
+                    case DF_DATETIME: {
+                        long long dtVal;
+                        if (seriesGetDateTime(newCol, r, &dtVal)) {
+                            seriesAddDateTime(&newCopy, dtVal);
+                        }
+                    } break;
                 }
             }
             result.addSeries(&result, &newCopy);
             seriesFree(&newCopy);
         }
         else {
-            // We find which original column c maps to:
-            // if c < insertPos => c is c,
-            // if c > insertPos => c is c-1
-            size_t origIndex = (c < insertPos) ? c : (c-1);
+            // For the original columns
+            size_t origIndex = (c < insertPos) ? c : (c - 1);
             if (origIndex >= nCols) {
                 // out of range => skip
                 continue;
             }
             const Series* s = df->getSeries(df, origIndex);
             if (!s) continue;
+
             Series copyS;
             seriesInit(&copyS, s->name, s->type);
             size_t cRows = seriesSize(s);
@@ -572,6 +632,15 @@ DataFrame dfInsert_impl(const DataFrame* df, size_t insertPos, const Series* new
                         if (seriesGetString(s, r, &str)) {
                             seriesAddString(&copyS, str);
                             free(str);
+                        }
+                    } break;
+                    /* ----------------------------
+                     *  DF_DATETIME
+                     * ---------------------------- */
+                    case DF_DATETIME: {
+                        long long dtVal;
+                        if (seriesGetDateTime(s, r, &dtVal)) {
+                            seriesAddDateTime(&copyS, dtVal);
                         }
                     } break;
                 }

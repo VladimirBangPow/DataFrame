@@ -7,6 +7,8 @@
         "stdbool.h": "c",
         "string.h": "c",
         "dataframe_reshape_test.h": "c",
-        "dataframe_combine_test.h": "c"
+        "dataframe_combine_test.h": "c",
+        "__locale": "c",
+        "ios": "c"
     }
 }

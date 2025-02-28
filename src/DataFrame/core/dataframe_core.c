@@ -105,6 +105,10 @@ void dfFree_impl(DataFrame* df)
     df->nrows = 0;
 }
 
+/* 
+ * Modify dfAddSeries_impl to handle DF_DATETIME 
+ * by copying each datetime value from the source Series
+ */
 bool dfAddSeries_impl(DataFrame* df, const Series* s)
 {
     if (!df || !s) return false;
@@ -120,9 +124,10 @@ bool dfAddSeries_impl(DataFrame* df, const Series* s)
         }
     }
 
-    // Copy the incoming Series
+    // Create a new Series in the DataFrame
     Series newSeries;
     seriesInit(&newSeries, s->name, s->type);
+
     for (size_t i = 0; i < seriesSize(s); i++) {
         switch (s->type) {
             case DF_INT: {
@@ -130,11 +135,13 @@ bool dfAddSeries_impl(DataFrame* df, const Series* s)
                 seriesGetInt(s, i, &val);
                 seriesAddInt(&newSeries, val);
             } break;
+
             case DF_DOUBLE: {
                 double val;
                 seriesGetDouble(s, i, &val);
                 seriesAddDouble(&newSeries, val);
             } break;
+
             case DF_STRING: {
                 char* str = NULL;
                 if (seriesGetString(s, i, &str)) {
@@ -142,9 +149,20 @@ bool dfAddSeries_impl(DataFrame* df, const Series* s)
                     free(str);
                 }
             } break;
+
+            /* ------------------------------------------------------------------
+             * NEW: Handle DF_DATETIME by copying each 64-bit epoch value
+             * ------------------------------------------------------------------ */
+            case DF_DATETIME: {
+                long long dtVal;
+                if (seriesGetDateTime(s, i, &dtVal)) {
+                    seriesAddDateTime(&newSeries, dtVal);
+                }
+            } break;
         }
     }
 
+    // Add the new Series to the DataFrame
     daPushBack(&df->columns, &newSeries, sizeof(Series));
     return true;
 }
@@ -168,6 +186,10 @@ const Series* dfGetSeries_impl(const DataFrame* df, size_t colIndex)
     return (const Series*)daGet(&df->columns, colIndex);
 }
 
+/*
+ * Modify dfAddRow_impl to handle DF_DATETIME:
+ * When rowData[c] is a pointer to a 64-bit datetime value, we add it
+ */
 bool dfAddRow_impl(DataFrame* df, const void** rowData)
 {
     if (!df || !rowData) return false;
@@ -181,21 +203,33 @@ bool dfAddRow_impl(DataFrame* df, const void** rowData)
     for (size_t c = 0; c < nCols; c++) {
         Series* s = (Series*)daGetMutable(&df->columns, c);
         if (!s) return false;
+
         switch (s->type) {
             case DF_INT: {
                 const int* valPtr = (const int*)rowData[c];
                 if (!valPtr) return false;
                 seriesAddInt(s, *valPtr);
             } break;
+
             case DF_DOUBLE: {
                 const double* valPtr = (const double*)rowData[c];
                 if (!valPtr) return false;
                 seriesAddDouble(s, *valPtr);
             } break;
+
             case DF_STRING: {
                 const char* strPtr = (const char*)rowData[c];
                 if (!strPtr) return false;
                 seriesAddString(s, strPtr);
+            } break;
+
+            /* ---------------------------------------------------------
+             * NEW: DF_DATETIME 
+             * --------------------------------------------------------- */
+            case DF_DATETIME: {
+                const long long* dtPtr = (const long long*)rowData[c];
+                if (!dtPtr) return false;
+                seriesAddDateTime(s, *dtPtr);
             } break;
         }
     }
@@ -221,21 +255,21 @@ void DataFrame_Create(DataFrame* df)
     df->addRow       = dfAddRow_impl;
 
     // Now the "query" pointers that return DataFrame:
-    df->head         = dfHead_impl;        // DataFrame(*)(const DataFrame*, size_t)
-    df->tail         = dfTail_impl;        // DataFrame(*)(const DataFrame*, size_t)
-    df->describe     = dfDescribe_impl;    // DataFrame(*)(const DataFrame*)
-    df->slice        = dfSlice_impl;       // DataFrame(*)(const DataFrame*, size_t, size_t)
+    df->head         = dfHead_impl;
+    df->tail         = dfTail_impl;
+    df->describe     = dfDescribe_impl;
+    df->slice        = dfSlice_impl;
     df->sample       = dfSample_impl;
-    df->selectColumns = dfSelectColumns_impl;
+    df->selectColumns= dfSelectColumns_impl;
     df->dropColumns  = dfDropColumns_impl;
-    df->renameColumns = dfRenameColumns_impl;
+    df->renameColumns= dfRenameColumns_impl;
     df->filter       = dfFilter_impl;
     df->dropNA       = dfDropNA_impl;
     df->sort         = dfSort_impl;
     df->groupBy      = dfGroupBy_impl;
     df->pivot        = dfPivot_impl;
     df->melt         = dfMelt_impl;
-    df->dropDuplicates = dfDropDuplicates_impl;
+    df->dropDuplicates= dfDropDuplicates_impl;
     df->unique       = dfUnique_impl;
 
     // Aggregation returning double:

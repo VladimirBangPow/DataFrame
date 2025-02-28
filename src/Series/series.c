@@ -2,12 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <inttypes.h>  // for PRId64 or similar if you want printing macros
 
-#include "series.h"                // The new series header
+#include "series.h"  // The new series header
 
-/*
- * Helper: Duplicate string safely.
- */
 static char* safeStrdup(const char* src) {
     if (!src) return NULL;
     size_t len = strlen(src) + 1;
@@ -16,10 +14,6 @@ static char* safeStrdup(const char* src) {
     memcpy(copy, src, len);
     return copy;
 }
-
-/*
- * Implementation of Series functions
- */
 
 void seriesInit(Series* s, const char* name, ColumnType type) {
     if (!s) return;
@@ -33,8 +27,7 @@ void seriesFree(Series* s) {
     if (!s) return;
 
     // For DF_STRING, we do NOT individually free each string because 
-    // DynamicArray code already free()s every pointer. 
-    // (Your design uses daPushBack to copy the string with its own malloc.)
+    // DynamicArray code already free()s every pointer if it allocated them.
     daFree(&s->data);
 
     // Free the series name
@@ -59,10 +52,32 @@ void seriesAddDouble(Series* s, double value) {
 
 void seriesAddString(Series* s, const char* str) {
     if (!s || s->type != DF_STRING || !str) return;
-    // Let daPushBack handle the copy
     size_t len = strlen(str) + 1;
-    daPushBack(&s->data, str, len);
+    daPushBack(&s->data, str, len); // store a copy in the dynamic array
 }
+
+/* ---------------------------------------------------------------------------
+ * Add a DateTime value (64-bit, e.g. microseconds since Unix epoch)
+ * --------------------------------------------------------------------------- */
+void seriesAddDateTime(Series* s, long long datetimeMicros) {
+    if (!s || s->type != DF_DATETIME) return;
+    daPushBack(&s->data, &datetimeMicros, sizeof(long long));
+}
+
+/* ---------------------------------------------------------------------------
+ * Get a DateTime value (64-bit)
+ * --------------------------------------------------------------------------- */
+bool seriesGetDateTime(const Series* s, size_t index, long long* outValue) {
+    if (!s || s->type != DF_DATETIME || !outValue) return false;
+    if (index >= daSize(&s->data)) return false;
+
+    const long long* valPtr = (const long long*)daGet(&s->data, index);
+    if (!valPtr) return false;
+
+    *outValue = *valPtr;
+    return true;
+}
+/* --------------------------------------------------------------------------- */
 
 bool seriesGetInt(const Series* s, size_t index, int* outValue) {
     if (!s || s->type != DF_INT || !outValue) return false;
@@ -88,7 +103,6 @@ bool seriesGetString(const Series* s, size_t index, char** outStr) {
     const char* valPtr = (const char*)daGet(&s->data, index);
     if (!valPtr) return false;
 
-    // Return a fresh copy to the caller
     *outStr = safeStrdup(valPtr);
     return (*outStr != NULL);
 }
@@ -97,9 +111,18 @@ void seriesPrint(const Series* s) {
     if (!s) return;
     printf("Series \"%s\" (", s->name);
     switch (s->type) {
-        case DF_INT:    printf("int");    break;
-        case DF_DOUBLE: printf("double"); break;
-        case DF_STRING: printf("string"); break;
+        case DF_INT:
+            printf("int");
+            break;
+        case DF_DOUBLE:
+            printf("double");
+            break;
+        case DF_STRING:
+            printf("string");
+            break;
+        case DF_DATETIME:
+            printf("datetime (microseconds)");
+            break;
     }
     printf("), size = %zu\n", seriesSize(s));
 
@@ -114,7 +137,7 @@ void seriesPrint(const Series* s) {
             case DF_DOUBLE: {
                 double val;
                 if (seriesGetDouble(s, i, &val)) {
-                    printf("  [%zu] %f\n", i, val);
+                    printf("  [%zu] %.6f\n", i, val);
                 }
             } break;
             case DF_STRING: {
@@ -122,6 +145,14 @@ void seriesPrint(const Series* s) {
                 if (seriesGetString(s, i, &str)) {
                     printf("  [%zu] \"%s\"\n", i, str);
                     free(str);
+                }
+            } break;
+            case DF_DATETIME: {
+                long long dtVal;
+                if (seriesGetDateTime(s, i, &dtVal)) {
+                    // Just print the 64-bit value. Optionally, you can 
+                    // convert it to a human-readable string using strftime.
+                    printf("  [%zu] %lld\n", i, dtVal);
                 }
             } break;
         }

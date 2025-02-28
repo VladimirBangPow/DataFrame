@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <time.h>
 #include "../dataframe.h"
 
 /* -------------------------------------------------------------------------
@@ -10,6 +11,12 @@
  * ------------------------------------------------------------------------- */
 static size_t splitCsvLine(char* line, char** tokens, size_t maxTokens);
 static int checkNumericType(const char* str);
+
+/* NEW: Check if a string is likely a date/time (very naive approach). */
+static bool isLikelyDateTime(const char* str);
+
+/* NEW: Convert a date/time string to epoch as a long long. */
+static long long parseDateTimeToEpoch(const char* dateStr);
 
 /**
  * loadCsvIntoBuffer:
@@ -37,7 +44,7 @@ static void freeCsvBuffer(
 );
 
 /**
- * Decide whether a column is DF_INT, DF_DOUBLE, or DF_STRING 
+ * Decide whether a column is DF_INT, DF_DOUBLE, DF_STRING, or DF_DATETIME
  * by scanning all rows in that column.
  */
 static ColumnType inferColumnType(
@@ -47,9 +54,6 @@ static ColumnType inferColumnType(
     size_t colIndex
 );
 
-/* -------------------------------------------------------------------------
- * The function you actually use in DataFrame_Create (extern in dataframe_core.c)
- * ------------------------------------------------------------------------- */
 bool readCsv_impl(DataFrame* df, const char* filename)
 {
     if (!df || !filename) {
@@ -65,11 +69,10 @@ bool readCsv_impl(DataFrame* df, const char* filename)
         return false; // already logged error
     }
 
-    // If df was used before, you might want to do df->free(df) here, 
-    // but typically we assume df is fresh. We'll just do df->init:
-    df->init(df);
+    // If df was used before, you might want to df->free(df) here
+    df->init(df); // ensure it's in a clean state
 
-    // If no data rows, create empty columns (DF_STRING)
+    // If no data rows, create empty columns (DF_STRING by default)
     if (nRows == 0) {
         for (size_t c = 0; c < nCols; c++) {
             Series s;
@@ -110,10 +113,16 @@ bool readCsv_impl(DataFrame* df, const char* filename)
                 case DF_STRING: {
                     seriesAddString(&s, valStr);
                 } break;
+                /* ------------------------------------------------------
+                 * NEW: DF_DATETIME => parse date/time to a 64-bit epoch
+                 * ------------------------------------------------------*/
+                case DF_DATETIME: {
+                    long long dtEpoch = parseDateTimeToEpoch(valStr);
+                    seriesAddDateTime(&s, dtEpoch);
+                } break;
             }
         }
         df->addSeries(df, &s);
-        // We free the local copy, not the DataFrame copy:
         seriesFree(&s);
     }
 
@@ -154,6 +163,65 @@ static int checkNumericType(const char* str)
         return 1; // double
     }
     return -1; // neither
+}
+
+/* 
+ * isLikelyDateTime:
+ *   - Very naive check: attempts to parse with strptime 
+ *     using a known format (e.g. "%Y-%m-%d %H:%M:%S").
+ *   - If parse fails, returns false.
+ *   - In real usage, you might test multiple formats or check for partial date.
+ */
+static bool isLikelyDateTime(const char* str)
+{
+    if (!str || !*str) return false;
+
+    // Try a common datetime format
+    struct tm tmVal;
+    memset(&tmVal, 0, sizeof(tmVal));
+
+    // Example format: "YYYY-MM-DD HH:MM:SS"
+    // Adjust to your CSV’s typical date/time format as needed.
+    char* ret = strptime(str, "%Y-%m-%d %H:%M:%S", &tmVal);
+    if (ret == NULL) {
+        // If that fails, try just date "YYYY-MM-DD"
+        memset(&tmVal, 0, sizeof(tmVal));
+        ret = strptime(str, "%Y-%m-%d", &tmVal);
+    }
+    return (ret != NULL);
+}
+
+/*
+ * parseDateTimeToEpoch:
+ *   - Convert the string (assumed date/time) to a 64-bit epoch time in seconds.
+ *     If you want microseconds, multiply by 1,000,000.
+ *   - Uses timegm (GNU extension) or mktime (local time).
+ *     Adjust to your preference/timezone.
+ */
+static long long parseDateTimeToEpoch(const char* dateStr)
+{
+    if (!dateStr) return 0;
+
+    // Attempt to parse with the same formats as isLikelyDateTime
+    struct tm tmVal;
+    memset(&tmVal, 0, sizeof(tmVal));
+    char* ret = strptime(dateStr, "%Y-%m-%d %H:%M:%S", &tmVal);
+    if (!ret) {
+        // fallback: try just date
+        memset(&tmVal, 0, sizeof(tmVal));
+        ret = strptime(dateStr, "%Y-%m-%d", &tmVal);
+    }
+
+    if (!ret) {
+        // fallback if parse fails
+        return 0;
+    }
+
+    // Use timegm if you want UTC-based, or mktime for local time
+    time_t seconds = timegm(&tmVal);
+    // Return as seconds (for DF_DATETIME you might prefer microseconds)
+    // e.g.: return (long long)seconds * 1000000LL;
+    return (long long)seconds;
 }
 
 static bool loadCsvIntoBuffer(
@@ -286,6 +354,12 @@ static void freeCsvBuffer(
     }
 }
 
+/*
+ * inferColumnType: 
+ *   1) If all rows in col parse as date/time => DF_DATETIME
+ *   2) else if all rows numeric => DF_INT or DF_DOUBLE
+ *   3) else => DF_STRING
+ */
 static ColumnType inferColumnType(
     size_t nRows,
     char*** cells,
@@ -293,19 +367,29 @@ static ColumnType inferColumnType(
     size_t colIndex
 )
 {
+    bool allDatetime = true;
+    for (size_t r = 0; r < nRows; r++) {
+        if (!isLikelyDateTime(cells[r][colIndex])) {
+            allDatetime = false;
+            break;
+        }
+    }
+    if (allDatetime) {
+        return DF_DATETIME;
+    }
+
+    // Next fallback: numeric or string
     // 0 => can be int, 1 => can be double, 2 => must be string
     int colStage = 0;
     for (size_t r = 0; r < nRows; r++) {
         const char* val = cells[r][colIndex];
         int t = checkNumericType(val);
         if (t < 0) {
-            colStage = 2;
+            colStage = 2; // string
             break;
         } else if (t == 1) {
-            if (colStage == 0) {
-                // once we see a double, entire column is double
-                colStage = 1;
-            }
+            // once we see a double, entire column is double
+            colStage = 1;
         }
     }
     if (colStage == 0) return DF_INT;

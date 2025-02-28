@@ -79,6 +79,7 @@ static void pivotPush(PivotItem** pivotData, size_t* pUsed, size_t* pCap,
 /**
  * @brief pivotCellToString
  *  Convert the cell at rowIndex in 's' to a string in buf[]. If none found, buf[0] = '\0'.
+ *  Extended to handle DF_DATETIME by printing the 64-bit timestamp.
  */
 static void pivotCellToString(const Series* s, size_t rowIndex, char* buf, size_t bufSize)
 {
@@ -103,6 +104,14 @@ static void pivotCellToString(const Series* s, size_t rowIndex, char* buf, size_
                 strncpy(buf, str, bufSize - 1);
                 buf[bufSize - 1] = '\0';
                 free(str);
+            }
+        } break;
+        /* NEW: DF_DATETIME => print as epoch or convert to string */
+        case DF_DATETIME: {
+            long long dtVal;
+            if (seriesGetDateTime(s, rowIndex, &dtVal)) {
+                snprintf(buf, bufSize, "%lld", dtVal);
+                // Or convert to something like YYYY-MM-DD
             }
         } break;
     }
@@ -158,7 +167,6 @@ DataFrame dfPivot_impl(const DataFrame* df, size_t indexCol, size_t columnsCol, 
     }
 
     // read again, building pivotData
-    // Actually we can do it in the same pass, but let's keep it simple
     for (size_t r = 0; r < nRows; r++) {
         pivotCellToString(idxS, r, bufIdx, sizeof(bufIdx));
         pivotCellToString(colS, r, bufCol, sizeof(bufCol));
@@ -235,7 +243,6 @@ DataFrame dfPivot_impl(const DataFrame* df, size_t indexCol, size_t columnsCol, 
 }
 
 
-
 /* 
    ========================
    MELT FUNCTIONS
@@ -259,6 +266,7 @@ static bool isIdColumn(size_t colIndex, const size_t* idCols, size_t idCount)
 /**
  * @brief cellToString
  *  Convert the cell at rowIndex in Series s -> string stored in buf[].
+ *  Extended to handle DF_DATETIME by printing epoch.
  */
 static void cellToString(const Series* s, size_t rowIndex, char* buf, size_t bufSize)
 {
@@ -285,6 +293,13 @@ static void cellToString(const Series* s, size_t rowIndex, char* buf, size_t buf
                 free(st);
             }
         } break;
+        /* NEW: DF_DATETIME => just print the epoch */
+        case DF_DATETIME: {
+            long long dtVal;
+            if (seriesGetDateTime(s, rowIndex, &dtVal)) {
+                snprintf(buf, bufSize, "%lld", dtVal);
+            }
+        } break;
     }
 }
 
@@ -292,6 +307,8 @@ static void cellToString(const Series* s, size_t rowIndex, char* buf, size_t buf
  * @brief dfMelt_impl
  *  Convert the wide data into a long format with columns: 
  *    [ idCol1, idCol2, ..., variable (string), value (string) ]
+ *  For DF_DATETIME columns in ID, we store them as DF_DATETIME in the result ID column.
+ *  For the "value" column, everything is stored as a string.
  */
 DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
 {
@@ -306,35 +323,15 @@ DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
     }
 
     // We'll gather the "non-id" columns => these become "melted" into variable/value pairs.
-    // We'll build an array of all "value" col indices
     size_t* valCols = (size_t*)malloc(sizeof(size_t) * nCols);
     size_t valCount = 0;
-
     for (size_t c = 0; c < nCols; c++) {
         if (!isIdColumn(c, idCols, idCount)) {
-            valCols[valCount] = c;
-            valCount++;
+            valCols[valCount++] = c;
         }
     }
 
-    // We'll produce a new DataFrame. 
-    // The new DF has idCount columns with the same type as original, 
-    // plus 1 column "variable" (DF_STRING), plus 1 column "value" (DF_STRING).
-
-    // Let's create an array of Series for the ID columns so we can fill them as we build the melted rows.
-    // We'll do that after we figure out how many total rows we get: totalRows = nRows * valCount 
-    // Because each of the valCount columns becomes "stacked" for each row.
-
-    // We want to store all the "melted" data in memory, then push to the Series. 
-    // Alternatively, we can do it row by row.
-
-    // We'll do row by row approach:
-    // For each row r in [0..nRows-1]:
-    //   - read the ID col values 
-    //   - for each valCol => create 1 new row in result => copy ID col values, "variable"= colName, "value"= cellValue
-
-    // Prepare to build Series in 'result'
-    // 1) For each ID col, we'll create a Series with same name & type as original
+    // Create an array of Series for the ID columns (same type as original)
     Series* outIdSeries = (Series*)calloc(idCount, sizeof(Series));
     for (size_t i = 0; i < idCount; i++) {
         const Series* s = df->getSeries(df, idCols[i]);
@@ -346,53 +343,33 @@ DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
         }
     }
 
-    // 2) variable & value columns => both DF_STRING
+    // Create "variable" (DF_STRING) and "value" (DF_STRING)
     Series varSeries, valSeries;
     seriesInit(&varSeries, "variable", DF_STRING);
     seriesInit(&valSeries, "value", DF_STRING);
 
-    // We'll iterate all rows r. For each row, each valCol => produce 1 new row in the melted DF.
-    // So total new rows = nRows * valCount
-    // We'll just do appends in the same order.
-
+    // For each row r => for each valCol => produce 1 new "long" row
     for (size_t r = 0; r < nRows; r++) {
-        // read ID col values
-        // We'll store them as local variables for numeric, or as string for string. 
-        // But we need to do it for each "sub-row" we create. 
-        // Easiest approach is to fill them each time. 
-        // We'll store them as "pending" additions in an array, so we can do repeated appends.
-
-        // We'll store them as strings or numeric. If the ID column is numeric, we do numeric appends; if string, we do string appends.
-        // We'll do an array for the numeric or string approach. 
-        // Actually, let's do direct appends on each valCol iteration, though that means repeating the copying.
-
-        // Actually simpler is: for each valCol, we do:
-        //   - for each ID col => read & add
-        //   - add var, add val
-        // That means we do the "row" building in the series themselves. 
-        // Because each ID column might have a different type.
-
         for (size_t vc = 0; vc < valCount; vc++) {
             size_t realCol = valCols[vc];
             const Series* meltS = df->getSeries(df, realCol);
             if (!meltS) continue;
 
-            // Step A: push ID col values for this new row
+            // A) For each ID column, copy the row's data to outIdSeries[i]
             for (size_t i = 0; i < idCount; i++) {
                 const Series* idSer = df->getSeries(df, idCols[i]);
                 if (!idSer) {
                     // fallback
-                    if (outIdSeries[i].type == DF_STRING) {
-                        seriesAddString(&outIdSeries[i], "");
-                    } else if (outIdSeries[i].type == DF_INT) {
-                        seriesAddInt(&outIdSeries[i], 0);
-                    } else { // DF_DOUBLE
-                        seriesAddDouble(&outIdSeries[i], 0.0);
+                    switch (outIdSeries[i].type) {
+                        case DF_INT:    seriesAddInt(&outIdSeries[i], 0);    break;
+                        case DF_DOUBLE: seriesAddDouble(&outIdSeries[i], 0); break;
+                        case DF_STRING: seriesAddString(&outIdSeries[i], ""); break;
+                        case DF_DATETIME: seriesAddDateTime(&outIdSeries[i], 0LL); break;
                     }
                     continue;
                 }
 
-                // We match the type
+                // Match the original type
                 switch (idSer->type) {
                     case DF_INT: {
                         int v;
@@ -419,33 +396,41 @@ DataFrame dfMelt_impl(const DataFrame* df, const size_t* idCols, size_t idCount)
                             seriesAddString(&outIdSeries[i], "");
                         }
                     } break;
+                    /* NEW: DF_DATETIME in ID column => keep as DF_DATETIME */
+                    case DF_DATETIME: {
+                        long long dt;
+                        if (seriesGetDateTime(idSer, r, &dt)) {
+                            seriesAddDateTime(&outIdSeries[i], dt);
+                        } else {
+                            seriesAddDateTime(&outIdSeries[i], 0LL);
+                        }
+                    } break;
                 }
             }
 
-            // Step B: push "variable" => meltS->name
+            // B) "variable" => meltS->name
             seriesAddString(&varSeries, meltS->name);
 
-            // Step C: push "value" => read the cell from meltS at row r, convert to string
-            // We'll do a local buffer approach
+            // C) "value" => string representation of the cell
             char cellBuf[128] = "";
             cellToString(meltS, r, cellBuf, sizeof(cellBuf));
             seriesAddString(&valSeries, cellBuf);
         }
     }
 
-    // Now we attach the ID columns to result, then var & val
+    // Attach ID columns to result
     for (size_t i = 0; i < idCount; i++) {
         result.addSeries(&result, &outIdSeries[i]);
         seriesFree(&outIdSeries[i]);
     }
     free(outIdSeries);
 
+    // Attach variable/value
     result.addSeries(&result, &varSeries);
     result.addSeries(&result, &valSeries);
     seriesFree(&varSeries);
     seriesFree(&valSeries);
 
     free(valCols);
-
     return result;
 }

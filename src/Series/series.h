@@ -77,4 +77,18 @@ bool seriesGetString(const Series* s, size_t index, char** outStr);
  */
 void seriesPrint(const Series* s);
 
+
+/**
+ * Add a datetime value (in microseconds since Unix epoch, or similar) to the Series
+ * (type must be DF_DATETIME).
+ */
+void seriesAddDateTime(Series* s, long long datetimeMicros);
+
+/**
+ * Retrieve a datetime value (in microseconds since Unix epoch) from a Series 
+ * at a given row index (if DF_DATETIME).
+ * Returns false if out of range or wrong type.
+ */
+bool seriesGetDateTime(const Series* s, size_t index, long long* outValue);
+
 #endif // SERIES_H

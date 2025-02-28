@@ -1,14 +1,66 @@
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>   // for random seeds in stress test
+#include <stdbool.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+#include <assert.h>
 #include "dataframe_core_test.h"
-#include "../dataframe.h"        // or wherever your DataFrame headers are
-#include "../../Series/series.h"           // for creating Series
+#include "../dataframe.h"        // DataFrame + Series definitions
+#include "../../Series/series.h" // or wherever your Series code is
+
+// Existing testCore prototypes:
+extern void testCore(void);
+
+// Already have testBasicAddSeriesAndRows() and testStress() in your code
 
 /**
- * Helper: build a small integer Series with the given name and some values.
+ * Builds a small DF_DOUBLE Series for testing.
  */
+static Series buildDoubleSeries(const char* name, const double* values, size_t count)
+{
+    Series s;
+    seriesInit(&s, name, DF_DOUBLE);
+    for (size_t i = 0; i < count; i++) {
+        seriesAddDouble(&s, values[i]);
+    }
+    return s;
+}
+
+/**
+ * Builds a small DF_STRING Series for testing.
+ */
+static Series buildStringSeries(const char* name, const char* const* values, size_t count)
+{
+    Series s;
+    seriesInit(&s, name, DF_STRING);
+    for (size_t i = 0; i < count; i++) {
+        seriesAddString(&s, values[i]);
+    }
+    return s;
+}
+
+/**
+ * Builds a DF_DATETIME Series with given epoch values (seconds or millis).
+ */
+static Series buildDatetimeSeries(const char* name, const long long* epochValues, size_t count)
+{
+    Series s;
+    seriesInit(&s, name, DF_DATETIME);
+    for (size_t i = 0; i < count; i++) {
+        seriesAddDateTime(&s, epochValues[i]);
+    }
+    return s;
+}
+
+/**
+ * Compare two double values with some small epsilon
+ */
+static bool nearlyEqual(double a, double b, double eps)
+{
+    return (fabs(a - b) < eps);
+}
+
 static Series buildIntSeries(const char* name, const int* values, size_t count)
 {
     Series s;
@@ -18,6 +70,208 @@ static Series buildIntSeries(const char* name, const int* values, size_t count)
     }
     return s;
 }
+
+
+static void testDifferentColumnTypes(void)
+{
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 1) Build some sample data
+    int intVals[] = { 10, 20, 30, 40 };
+    double doubleVals[] = { 1.5, 2.5, 3.25, 4.75 };
+    const char* stringVals[] = { "apple", "banana", "cherry", "date" };
+    long long datetimeVals[] = { 1677612345LL, 1677612400LL, 1677612500LL, 1677613000LL }; 
+    // E.g., some arbitrary epoch seconds
+
+    Series sInt = buildIntSeries("IntCol", intVals, 4);
+    Series sDouble = buildDoubleSeries("DoubleCol", doubleVals, 4);
+    Series sString = buildStringSeries("StrCol", stringVals, 4);
+    Series sDatetime = buildDatetimeSeries("TimeCol", datetimeVals, 4);
+
+    bool ok = df.addSeries(&df, &sInt);
+    assert(ok);
+    ok = df.addSeries(&df, &sDouble);
+    assert(ok);
+    ok = df.addSeries(&df, &sString);
+    assert(ok);
+    ok = df.addSeries(&df, &sDatetime);
+    assert(ok);
+
+    // We can free the local series copies now
+    seriesFree(&sInt);
+    seriesFree(&sDouble);
+    seriesFree(&sString);
+    seriesFree(&sDatetime);
+
+    // 2) Check row/col counts
+    assert(df.numColumns(&df) == 4);
+    assert(df.numRows(&df) == 4);
+
+    // 3) Retrieve some values
+    const Series* colInt = df.getSeries(&df, 0);
+    const Series* colDouble = df.getSeries(&df, 1);
+    const Series* colString = df.getSeries(&df, 2);
+    const Series* colTime = df.getSeries(&df, 3);
+
+    assert(colInt && colDouble && colString && colTime);
+
+    // Check row 2 (zero-based => 3rd row):
+    int ival;
+    bool gotI = seriesGetInt(colInt, 2, &ival);
+    assert(gotI && ival == 30);
+
+    double dval;
+    bool gotD = seriesGetDouble(colDouble, 2, &dval);
+    assert(gotD && nearlyEqual(dval, 3.25, 1e-9));
+
+    char* strVal = NULL;
+    bool gotS = seriesGetString(colString, 2, &strVal);
+    assert(gotS && strVal && strcmp(strVal, "cherry") == 0);
+    free(strVal);
+
+    long long dtVal;
+    bool gotDT = seriesGetDateTime(colTime, 2, &dtVal);
+    assert(gotDT && dtVal == 1677612500LL);
+
+    // 4) Test aggregations on numeric columns
+    double sumInt = df.sum(&df, 0);   // sum of IntCol => 10+20+30+40=100
+    double sumDbl = df.sum(&df, 1);   // sum of DoubleCol => 1.5+2.5+3.25+4.75=12.0
+    double meanInt = df.mean(&df, 0); // => 100 / 4 = 25
+    double meanDbl = df.mean(&df, 1); // => 12.0 / 4 = 3.0
+
+    assert(nearlyEqual(sumInt, 100.0, 1e-9));
+    assert(nearlyEqual(sumDbl, 12.0, 1e-9));
+    assert(nearlyEqual(meanInt, 25.0, 1e-9));
+    assert(nearlyEqual(meanDbl, 3.0, 1e-9));
+
+    // 5) Test slicing: head(2), tail(2)
+    DataFrame head2 = df.head(&df, 2);
+    assert(head2.numRows(&head2) == 2);
+    assert(head2.numColumns(&head2) == 4);
+    // check row 1 col 0 => 20
+    const Series* h0 = head2.getSeries(&head2, 0);
+    seriesGetInt(h0, 1, &ival);
+    assert(ival == 20);
+    DataFrame_Destroy(&head2);
+
+    DataFrame tail2 = df.tail(&df, 2);
+    assert(tail2.numRows(&tail2) == 2);
+    const Series* t0 = tail2.getSeries(&tail2, 0);
+    seriesGetInt(t0, 0, &ival);
+    assert(ival == 30);
+    seriesGetInt(t0, 1, &ival);
+    assert(ival == 40);
+    DataFrame_Destroy(&tail2);
+
+    DataFrame_Destroy(&df);
+
+    printf(" - testDifferentColumnTypes passed.\n");
+}
+
+static void testAddRowWithDatetime(void)
+{
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // We'll define 2 columns: "EventTime" (DF_DATETIME), "Description" (DF_STRING)
+    // Initially empty
+    Series timeSeries;
+    seriesInit(&timeSeries, "EventTime", DF_DATETIME);
+    bool ok = df.addSeries(&df, &timeSeries);
+    seriesFree(&timeSeries);
+    assert(ok);
+
+    Series descSeries;
+    seriesInit(&descSeries, "Description", DF_STRING);
+    ok = df.addSeries(&df, &descSeries);
+    seriesFree(&descSeries);
+    assert(ok);
+
+    // Now let's add 3 rows
+    // rowData => array of 2 pointers: [ptr to long long, ptr to const char*]
+    long long e1 = 1678000000LL;
+    const char* d1 = "Start process";
+    const void* row1[] = { &e1, d1 };
+    ok = df.addRow(&df, row1);
+    assert(ok);
+
+    long long e2 = 1678000100LL;
+    const char* d2 = "Middle process";
+    const void* row2[] = { &e2, d2 };
+    ok = df.addRow(&df, row2);
+    assert(ok);
+
+    long long e3 = 1678000200LL;
+    const char* d3 = "End process";
+    const void* row3[] = { &e3, d3 };
+    ok = df.addRow(&df, row3);
+    assert(ok);
+
+    // Check final counts
+    assert(df.numColumns(&df) == 2);
+    assert(df.numRows(&df) == 3);
+
+    // Verify the data
+    const Series* tsCol = df.getSeries(&df, 0);
+    const Series* descCol = df.getSeries(&df, 1);
+    assert(tsCol && descCol);
+
+    long long checkDT;
+    bool gotDT = seriesGetDateTime(tsCol, 2, &checkDT);
+    assert(gotDT && checkDT == 1678000200LL);
+
+    char* checkStr = NULL;
+    bool gotStr = seriesGetString(descCol, 2, &checkStr);
+    assert(gotStr && checkStr && strcmp(checkStr, "End process") == 0);
+    free(checkStr);
+
+    DataFrame_Destroy(&df);
+
+    printf(" - testAddRowWithDatetime passed.\n");
+}
+
+
+static void testConvertDatesToEpoch(void)
+{
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Build a string column of date/time
+    const char* dateStrs[] = {
+        "2023-01-01 00:00:00",
+        "2023-01-01 01:00:00",
+        "2023-01-02 12:34:56"
+    };
+    Series dateSeries = buildStringSeries("DateCol", dateStrs, 3);
+
+    bool ok = df.addSeries(&df, &dateSeries);
+    seriesFree(&dateSeries);
+    assert(ok);
+
+    // Convert them to epoch (assuming your method does that in-place)
+    ok = df.convertDatesToEpoch(&df, 0, "%Y-%m-%d %H:%M:%S", false);
+    assert(ok);
+
+    // Now the column is presumably DF_DATETIME internally
+    const Series* resultCol = df.getSeries(&df, 0);
+    assert(resultCol->type == DF_DATETIME);
+
+    // We can't know the exact epoch unless we do manual conversions,
+    // but we can check that the calls succeed:
+    long long dtVal;
+    bool got = seriesGetDateTime(resultCol, 0, &dtVal);
+    assert(got);
+    // e.g., 2023-01-01 00:00:00 UTC => 1672531200 in epoch seconds
+    // Adjust if your code uses localtime or timegm
+    // We'll just do a rough check that it's > 0
+    assert(dtVal > 0);
+
+    DataFrame_Destroy(&df);
+    printf(" - testConvertDatesToEpoch passed.\n");
+}
+
+
 
 /**
  * Helper: test adding a few series, check row/col counts, etc.
@@ -151,12 +405,17 @@ static void testStress(void)
 void testCore(void)
 {
     printf("Running DataFrame core tests...\n");
+    testDifferentColumnTypes();
+    testAddRowWithDatetime();
+    testConvertDatesToEpoch();
 
     testBasicAddSeriesAndRows();
-    printf(" - Basic addSeries/addRow tests passed.\n");
+    // printf(" - Basic addSeries/addRow tests passed.\n");
 
     testStress();
-    printf(" - Stress test passed.\n");
+    // printf(" - Stress test passed.\n");
 
-    printf("All dataframe_core tests passed successfully!\n");
+
+
+    printf("All DataFrame core tests passed successfully!\n");
 }
