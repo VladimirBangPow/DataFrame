@@ -9,3 +9,11 @@
 ### df->addSeries()
 
 ![AddSeries](diagrams/addSeries.png "AddSeries")
+
+
+### df->numColumns()
+![NColumns](diagrams/NColumns.png "NColumns")
+
+
+### df->numRows()
+![NRows](diagrams/NRows.png "NRows")
