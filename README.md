@@ -17,3 +17,8 @@
 
 ### df->numRows()
 ![NRows](diagrams/NRows.png "NRows")
+
+
+
+### df->getSeries()
+![GetSeries](diagrams/GetSeries.png "GetSeries")
