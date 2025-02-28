@@ -4,4 +4,4 @@
 
 ### AddSeries
 
-![AddSeries](diagrams/AddSeries.png "AddSeries")
+![AddSeries](diagrams/addSeries.png "AddSeries")
