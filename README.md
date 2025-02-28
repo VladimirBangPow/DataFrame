@@ -26,3 +26,8 @@
 
 ### bool df.addRow(DataFrame* df, const void** rowData)
 ![AddRow](diagrams/AddRow.png "AddRow")
+
+
+
+### bool df.getRow(DataFrame* df, size_t rowIndex, void** outRow)
+![GetRow](diagrams/GetRow.png "GetRow")
