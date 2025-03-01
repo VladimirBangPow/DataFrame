@@ -80,13 +80,11 @@ extern void dfPlot_impl(const DataFrame* df,
 /* Date/Time */
 extern bool dfConvertToDatetime_impl(DataFrame* df,
                                        size_t dateColIndex,
-                                       const char* formatType,
-                                       bool toMillis);
+                                       const char* formatType);
 
 extern bool dfDatetimeToString_impl(DataFrame* df, 
                                         size_t dateColIndex, 
-                                        const char* outFormat,
-                                        bool storedAsMillis);  
+                                        const char* outFormat);  
 
 extern DataFrame dfDatetimeFilter_impl(const DataFrame* df,
                                     size_t dateColIndex,

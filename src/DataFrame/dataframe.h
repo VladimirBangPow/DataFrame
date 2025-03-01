@@ -116,13 +116,11 @@ typedef void   (*DataFramePlotFunc)(const DataFrame* df,
                                     const char* outputFile);
 typedef bool   (*DataFrameConvertToDatetimeFunc)(DataFrame* df,
                                                    size_t dateColIndex,
-                                                   const char* formatType,
-                                                   bool toMillis);
+                                                   const char* formatType);
 
 typedef bool  (*DataFrameDatetimeToStringFunc)(DataFrame* df, 
                                                 size_t dateColIndex, 
-                                                const char* outFormat,
-                                                bool storedAsMillis);
+                                                const char* outFormat);
 
 typedef DataFrame  (*DataFrameDatetimeFilterFunc)(const DataFrame* df,
                                             size_t dateColIndex,
