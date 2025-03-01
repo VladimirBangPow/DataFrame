@@ -327,14 +327,15 @@
 ![datetimeDiff](diagrams/datetimeDiff.png "datetimeDiff")
 
 
-| **col1 (ms)**       | **col2 (ms)**       | **Raw Difference** (`ms2 - ms1`) | **Result (seconds)** `(ms2 - ms1)/1000` | **Stored in DF_INT** | **Notes**                                                                                                 |
-|---------------------|---------------------|----------------------------------|------------------------------------------|-----------------------|-----------------------------------------------------------------------------------------------------------|
-| `0`                 | `0`                 | `0`                              | `0`                                      | `0`                   | If both columns have epoch=0 ms, difference is 0 sec.                                                     |
-| `1000`              | `2000`              | `1000`                           | `1`                                      | `1`                   | 1000 ms => 1 second difference.                                                                           |
-| `1678882496000`     | `1678882497000`     | `1000`                           | `1`                                      | `1`                   | If col1= "2023-03-15 12:34:56.000" and col2= "2023-03-15 12:34:57.000", difference=1s.                    |
-| `5000`              | `2000`              | `-3000`                          | `-3`                                     | `-3`                  | Negative difference if col2 < col1. The DF_INT cell will store -3.                                        |
-| `9999999999999`     | `10000000000000`    | `1` (×10³ difference in ms)      | `1` (×10³ / 1000 = 1)                    | `1`                   | Large but valid. If the difference fits an `int`, we store that.                                          |
-| *missing or invalid*| *missing or invalid*| *not read => fallback*           | `0`                                      | `0`                   | If either cell can’t be read via `seriesGetDateTime`, we store 0.                                         |
+| **Row** | **Column1 (msVal)** | **Column2 (msVal)** | **Operation**               | **Result in DF_INT** (ms) | **Notes**                                                                                     |
+|---------|---------------------|---------------------|-----------------------------|---------------------------|-----------------------------------------------------------------------------------------------|
+| 0       | 1,000,000          | 2,000,000          | (2,000,000 - 1,000,000)     | 1,000,000                | If both valid, returns the millisecond difference.                                           |
+| 1       | 5,000,000          | 6,000,000          | (6,000,000 - 5,000,000)     | 1,000,000                | Also valid => 1 million ms difference.                                                       |
+| 2       | 0                  | 0                  | (0 - 0)                     | 0                         | Same timestamps => difference = 0 ms.                                                        |
+| 3       | 10,000,000         | 5,000,000          | (5,000,000 - 10,000,000)    | -5,000,000               | If col2 < col1, result can be negative.                                                      |
+| 4       | *Invalid or missing*| 2,000,000          | *cannot read first value*   | 0                         | If reading ms fails for a row, the function stores 0 by default.                             |
+| 5       | 99999999999999     | 99999999999999 + 1 | (~1×10^14 ms difference)     | Might overflow as DF_INT  | If difference > 2^31-1 or < -2^31, the stored int may overflow. Consider using 64-bit field. |
+| 6       | 1678882496000      | 1678882896000       | (1678882896000 - 1678882496000)| 400,000                | e.g. 400 sec difference in ms if your timestamps are ~2023-03-15 plus some offset.            |
 
 ## Usage:
 ```c
@@ -392,6 +393,9 @@
 
 ```
 # Date::DataFrame datetimeFilter(const DataFrame* df, size_t dateColIndex, long long startMs, long long endMs)
+
+![datetimeFilter](diagrams/datetimeFilter.png "datetimeFilter")
+
 | **Column Type** | **Row Value** (`msVal`) | **`startMs`**         | **`endMs`**           | **Filter Condition**                  | **Included in Result?**                         |
 |-----------------|-------------------------|------------------------|-----------------------|---------------------------------------|-------------------------------------------------|
 | `DF_DATETIME`   | `0`                    | `0`                    | `9999999999`         | `0 >= 0 && 0 <= 9999999999`           | **Yes** (0 is in [0..9999999999])              |
