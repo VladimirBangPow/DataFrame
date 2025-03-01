@@ -521,9 +521,9 @@
 
     // times => same day => 2023-03-15, but different hours
     // plus another day => 2023-03-16
-    long long day1_0 = 1678838400LL; // "2023-03-15 00:00:00"
-    long long day1_1 = 1678842000LL; // "2023-03-15 01:00:00"
-    long long day2_0 = 1678924800LL; // "2023-03-16 00:00:00"
+    long long day1_0 = 1678838400LL * 1000LL; // "2023-03-15 00:00:00"
+    long long day1_1 = 1678842000LL * 1000LL; // "2023-03-15 01:00:00"
+    long long day2_0 = 1678924800LL * 1000LL; // "2023-03-16 00:00:00"
     Series sdt;
     seriesInit(&sdt, "GroupDT", DF_DATETIME);
     seriesAddDateTime(&sdt, day1_0);
@@ -536,7 +536,8 @@
     // group by day
     DataFrame grouped = df.datetimeGroupBy(&df, 0, "day");
     // We'll do a minimal check => at least 2 distinct days => 2 rows
-    assert(grouped.numRows(&grouped)==2 || grouped.numRows(&grouped)==1);
+    assert(grouped.numRows(&grouped)==2);
+    df.print(&grouped);
 
     DataFrame_Destroy(&grouped);
     DataFrame_Destroy(&df);
