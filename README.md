@@ -159,7 +159,7 @@
 
 # DataFrame::Date
 
-# Date::bool convertToDatetime(DataFrame* df, size_t dateColIndex, const char* formatType, bool toMillis)
+# Date::bool convertToDatetime(DataFrame* df, size_t dateColIndex, const char* formatType)
 | **Original Column Type** | **Example Cell Value**  | **`formatType`**             | **Result in DF_DATETIME (milliseconds)**                                                   |
 |--------------------------|-------------------------|------------------------------|--------------------------------------------------------------------------------------------|
 | **DF_STRING**            | `"2023-03-15 12:34:56"` | `"%Y-%m-%d %H:%M:%S"`        | Parse string → epoch seconds (UTC) via `strptime+timegm` ⇒ multiply by 1000. For example: <br/> `1678882496 * 1000 = 1678882496000` ms. |
