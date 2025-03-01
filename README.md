@@ -324,6 +324,9 @@
 
 # Date::DataFrame datetimeDiff(const DataFrame* df, size_t col1Index, size_t col2Index, const char* newColName)
 
+![datetimeDiff](diagrams/datetimeDiff.png "datetimeDiff")
+
+
 | **col1 (ms)**       | **col2 (ms)**       | **Raw Difference** (`ms2 - ms1`) | **Result (seconds)** `(ms2 - ms1)/1000` | **Stored in DF_INT** | **Notes**                                                                                                 |
 |---------------------|---------------------|----------------------------------|------------------------------------------|-----------------------|-----------------------------------------------------------------------------------------------------------|
 | `0`                 | `0`                 | `0`                              | `0`                                      | `0`                   | If both columns have epoch=0 ms, difference is 0 sec.                                                     |
@@ -339,37 +342,50 @@
     DataFrame_Create(&df);
 
     // We'll have 2 DF_DATETIME columns: Start, End
+    // Each storing epoch in milliseconds.
     Series sStart, sEnd;
     seriesInit(&sStart, "Start", DF_DATETIME);
     seriesInit(&sEnd, "End", DF_DATETIME);
 
-    // row 0 => start=1,000,000 ms, end=2,000,000 ms => diff=1000 (seconds)
-    long long starts[] = {1000000, 5000000, 0};
-    long long ends[]   = {2000000, 6000000, 0};
+    // row 0 => start=1,000,000 ms, end=2,000,000 ms => diff=1,000,000 ms
+    // row 1 => start=5,000,000 ms, end=6,000,000 ms => diff=1,000,000 ms
+    // row 2 => start=0, end=0 => diff=0 ms
+    long long starts[] = {1000000LL, 5000000LL, 0LL};
+    long long ends[]   = {2000000LL, 6000000LL, 0LL};
 
-
-    for (int i=0; i<3; i++) {
+    for (int i = 0; i < 3; i++) {
         seriesAddDateTime(&sStart, starts[i]);
         seriesAddDateTime(&sEnd,   ends[i]);
     }
-    bool ok = df.addSeries(&df, &sStart);  assert(ok);
-    ok = df.addSeries(&df, &sEnd);        assert(ok);
+    bool ok = df.addSeries(&df, &sStart);
+    assert(ok);
+    ok = df.addSeries(&df, &sEnd);
+    assert(ok);
+
     seriesFree(&sStart);
     seriesFree(&sEnd);
 
     // Diff => new DF with one column named "Diff"
+    // Now returns difference in ms
     DataFrame diffDF = df.datetimeDiff(&df, 0, 1, "Diff");
-    assert(diffDF.numColumns(&diffDF)==1);
+    assert(diffDF.numColumns(&diffDF) == 1);
+
     const Series* diffS = diffDF.getSeries(&diffDF, 0);
     assert(diffS && diffS->type == DF_INT);
 
-    int check=0;
+    // Check the results
+    int check = 0;
     bool gotVal = seriesGetInt(diffS, 0, &check);
-    assert(gotVal && check==1000);
+    // row0 => 2,000,000 - 1,000,000 => 1,000,000 ms
+    assert(gotVal && check == 1000000);
+
     seriesGetInt(diffS, 1, &check);
-    assert(check==1000);
+    // row1 => 6,000,000 - 5,000,000 => 1,000,000 ms
+    assert(check == 1000000);
+
     seriesGetInt(diffS, 2, &check);
-    assert(check==0);
+    // row2 => 0 - 0 => 0
+    assert(check == 0);
 
     DataFrame_Destroy(&diffDF);
     DataFrame_Destroy(&df);
