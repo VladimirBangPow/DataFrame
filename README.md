@@ -268,13 +268,19 @@
 
 
 # Date:bool datetimeAdd(DataFrame* df, size_t dateColIndex, int daysToAdd)
-| **DF_DATETIME Cell** (msVal)     | **daysToAdd** | **Seconds** (msVal/1000)   | **After Adding Days**                | **New Stored Value (ms)**                                                                                          | **Notes**                                                                                                                                           |
-|----------------------------------|--------------|----------------------------|--------------------------------------|--------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| `0`                              | `1`          | `0`                        | `1970-01-02 00:00:00 UTC` → `86400s` | `86400000`                                                                                                          | If we start at 1970-01-01 00:00:00 and add 1 day, we get epoch 86400 sec → stored as 86400000 ms.                                                   |
-| `1678871696000`                 | `1`          | `1678871696`              | Adds 1 day → `1678958096s`          | `1678958096000`                                                                                                    | Example: ~2023-03-15 12:34:56 UTC + 1 day => ~2023-03-16 12:34:56 → epoch 1678958096 sec → stored as 1678958096000 ms.                               |
-| `1678838400000`                 | `-2`         | `1678838400`              | Subtract 2 days → `1678665600s`      | `1678665600000`                                                                                                    | If original was “2023-03-15 00:00:00 UTC,” then subtracting 2 days => `2023-03-13 00:00:00 UTC` → 1678665600 sec → 1678665600000 ms.                |
-| `9999999999999999999` (very big)| `10`         | Possibly overflow if > `time_t` | If `timegm` fails => 0 fallback  | `0`                                                                                                                | If the new date is beyond representable range, we set newSec=0. Final stored ms => 0.                                                               |
-| *Any msVal but `gmtime` fails*   | *any*        | *N/A*                      | *N/A*                                | `0`                                                                                                                | If `gmtime` returns NULL, we do `newSec=0; newMs=0`.                                                                                                |
+
+![datetimeAdd](diagrams/datetimeAdd.png "datetimeAdd")
+
+
+| **Row** | **Original Value** (`msVal`)                                               | **msToAdd** = `86400000` (1 day)        | **Final Value** = `msVal + msToAdd`                                              | **Notes**                                                                                                    |
+|---------|---------------------------------------------------------------------------|-----------------------------------------|----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| Row 0   | `baseMs = 1678871696 * 1000` = `1678871696000`                            | `86400000`                              | `1678871696000 + 86400000 = 1678958096000`                                       | This represents shifting the initial date/time by exactly one day in milliseconds.                             |
+| Row 1   | `baseMs + (1 * 3600000) = 1678871696000 + 3600000 = 1678875296000`        | `86400000`                              | `1678875296000 + 86400000 = 1678961696000`                                       | An hour later than row 0 originally; still ends up exactly 1 day further in total.                             |
+| Row 2   | `baseMs + (2 * 3600000) = 1678871696000 + 7200000 = 1678878896000`        | `86400000`                              | `1678878896000 + 86400000 = 1678965296000`                                       | Two hours later than row 0; also gains 86400000 ms.                                                           |
+| *Invalid cell* | *Fails to read msVal (e.g. out-of-range?)*                        | *N/A*                                   | *No change or possibly set to 0 if your code clamps negative.*                    | If `seriesGetDateTime` fails, your code might skip or store 0. Depends on the exact logic in your implementation. |
+
+
+
 
 ## Usage:
 
@@ -282,27 +288,35 @@
     DataFrame df;
     DataFrame_Create(&df);
 
+    // Build a DF_DATETIME column in milliseconds
     Series sdt;
     seriesInit(&sdt, "Times", DF_DATETIME);
-    long long baseMs = 1678871696LL * 1000LL; // store in ms
+
+    // For example, base epoch ~ 2023-03-15 12:34:56 UTC
+    // Convert to ms by multiplying by 1000
+    long long baseMs = 1678871696LL * 1000LL;
+
+    // Add three rows, each 1 hour apart => 3600000 ms
     for (int i = 0; i < 3; i++) {
-        // step by hour => 3600s => 3,600,000 ms
         seriesAddDateTime(&sdt, baseMs + (i * 3600000LL));
     }
     bool ok = df.addSeries(&df, &sdt);
     seriesFree(&sdt);
     assert(ok);
 
-    // Add 1 day => 86,400 seconds => 86,400,000 ms
-    ok = df.datetimeAdd(&df, 0, 1);
+    // We want to add 1 day => 86,400 seconds => 86,400,000 ms
+    // (Assuming your "df.datetimeAdd" now expects ms to add)
+    long long oneDayMs = 86400000LL;
+    ok = df.datetimeAdd(&df, 0, oneDayMs);
     assert(ok);
 
+    // Check the first row's new value
     const Series* s2 = df.getSeries(&df, 0);
     long long val = 0;
     bool got = seriesGetDateTime(s2, 0, &val);
 
     // Expect baseMs + 86,400,000
-    long long expected = baseMs + 86400000LL;
+    long long expected = baseMs + oneDayMs;
     assert(got && val == expected);
 
     DataFrame_Destroy(&df);
