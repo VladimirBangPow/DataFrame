@@ -173,6 +173,43 @@
 | **DF_DATETIME**          | *Any input*            | (function does nothing)      | Actually your code overwrites with 0 ms if you attempt to parse DF_DATETIME. Typically no change. |
 
 
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Build a DF_STRING column of date/time
+    const char* dates[] = {
+        "2023-03-15 12:34:56",
+        "2023-03-16 00:00:00",
+        "invalid date",
+        "2023-03-17 23:59:59"
+    };
+    Series s;
+    seriesInit(&s, "TestDates", DF_STRING);
+    for (int i=0; i<4; i++) {
+        seriesAddString(&s, dates[i]);
+    }
+
+    bool ok = df.addSeries(&df, &s);
+    seriesFree(&s); // free local copy
+
+    ok = df.convertToDatetime(&df, 0, "%Y-%m-%d %H:%M:%S");
+
+    const Series* converted = df.getSeries(&df, 0);
+    assert(converted != NULL);
+    assert(converted->type == DF_DATETIME);
+
+    // For row 2 "invalid date", we expect epoch=0
+    long long val=0;
+    bool got = seriesGetDateTime(converted, 2, &val);
+    assert(got && val == 0);
+
+    DataFrame_Destroy(&df);
+
+```
+
+
 # Date::bool datetimeToString(DataFrame* df, size_t dateColIndex, const char* outFormat)
 | **DF_DATETIME Cell** (msVal)     | **Seconds** (msVal/1000) | **Remainder** (msVal % 1000) | **Output (assuming outFormat=\"%Y-%m-%d %H:%M:%S\")**                                                      | **Notes**                                                                                                        |
 |----------------------------------|--------------------------|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
@@ -181,6 +218,47 @@
 | `1678882496123`                  | `1678882496`            | `123`                        | `"2023-03-15 12:34:56.123"`                                                                                                                       | Same date/time as above, plus `.123` appended because remainder=123.                                            |
 | `9999999999999999999` (overflow)| (overflow if too large)  | (overflow)                   | `""` (empty)                                                                                                                                        | If `gmtime` fails due to out-of-range `time_t`, we store an empty string.                                        |
 | *Any valid msVal but `gmtime` fails internally* | *N/A*            | *N/A*                      | `""`                                                                                                                                                | If `gmtime` returns `NULL`, we store an empty string.                                                            |
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Make DF_DATETIME column with some known epochs (UTC)
+    // e.g. 1678871696 => "2023-03-15 12:34:56" if truly UTC
+    long long epochs[] = {
+        1678871696LL,
+        1678924800LL,
+        0LL,
+        1679003999LL
+    };
+    Series sd;
+    seriesInit(&sd, "Epochs", DF_DATETIME);
+    for (int i=0; i<4; i++) {
+        seriesAddDateTime(&sd, epochs[i]);
+    }
+    bool ok = df.addSeries(&df, &sd);
+    seriesFree(&sd);
+    assert(ok);
+
+    // Convert => DF_STRING
+    ok = df.datetimeToString(&df, 0, "%Y-%m-%d %H:%M:%S");
+    assert(ok);
+
+    // Check results
+    const Series* s2 = df.getSeries(&df, 0);
+    assert(s2 && s2->type == DF_STRING);
+    char* strVal = NULL;
+    bool got = seriesGetString(s2, 2, &strVal);
+    assert(got && strVal);
+    // row 2 => "1970-01-01 00:00:00" presumably
+    assert(strlen(strVal) > 0);
+    free(strVal);
+
+    DataFrame_Destroy(&df);
+```
+
+
 
 # Date:bool datetimeAdd(DataFrame* df, size_t dateColIndex, int daysToAdd)
 | **DF_DATETIME Cell** (msVal)     | **daysToAdd** | **Seconds** (msVal/1000)   | **After Adding Days**                | **New Stored Value (ms)**                                                                                          | **Notes**                                                                                                                                           |
@@ -191,7 +269,37 @@
 | `9999999999999999999` (very big)| `10`         | Possibly overflow if > `time_t` | If `timegm` fails => 0 fallback  | `0`                                                                                                                | If the new date is beyond representable range, we set newSec=0. Final stored ms => 0.                                                               |
 | *Any msVal but `gmtime` fails*   | *any*        | *N/A*                      | *N/A*                                | `0`                                                                                                                | If `gmtime` returns NULL, we do `newSec=0; newMs=0`.                                                                                                |
 
+## Usage:
 
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    Series sdt;
+    seriesInit(&sdt, "Times", DF_DATETIME);
+    long long baseMs = 1678871696LL * 1000LL; // store in ms
+    for (int i = 0; i < 3; i++) {
+        // step by hour => 3600s => 3,600,000 ms
+        seriesAddDateTime(&sdt, baseMs + (i * 3600000LL));
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // Add 1 day => 86,400 seconds => 86,400,000 ms
+    ok = df.datetimeAdd(&df, 0, 1);
+    assert(ok);
+
+    const Series* s2 = df.getSeries(&df, 0);
+    long long val = 0;
+    bool got = seriesGetDateTime(s2, 0, &val);
+
+    // Expect baseMs + 86,400,000
+    long long expected = baseMs + 86400000LL;
+    assert(got && val == expected);
+
+    DataFrame_Destroy(&df);
+```
 
 # Date::DataFrame datetimeDiff(const DataFrame* df, size_t col1Index, size_t col2Index, const char* newColName)
 
@@ -204,6 +312,48 @@
 | `9999999999999`     | `10000000000000`    | `1` (×10³ difference in ms)      | `1` (×10³ / 1000 = 1)                    | `1`                   | Large but valid. If the difference fits an `int`, we store that.                                          |
 | *missing or invalid*| *missing or invalid*| *not read => fallback*           | `0`                                      | `0`                   | If either cell can’t be read via `seriesGetDateTime`, we store 0.                                         |
 
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // We'll have 2 DF_DATETIME columns: Start, End
+    Series sStart, sEnd;
+    seriesInit(&sStart, "Start", DF_DATETIME);
+    seriesInit(&sEnd, "End", DF_DATETIME);
+
+    // row 0 => start=1,000,000 ms, end=2,000,000 ms => diff=1000 (seconds)
+    long long starts[] = {1000000, 5000000, 0};
+    long long ends[]   = {2000000, 6000000, 0};
+
+
+    for (int i=0; i<3; i++) {
+        seriesAddDateTime(&sStart, starts[i]);
+        seriesAddDateTime(&sEnd,   ends[i]);
+    }
+    bool ok = df.addSeries(&df, &sStart);  assert(ok);
+    ok = df.addSeries(&df, &sEnd);        assert(ok);
+    seriesFree(&sStart);
+    seriesFree(&sEnd);
+
+    // Diff => new DF with one column named "Diff"
+    DataFrame diffDF = df.datetimeDiff(&df, 0, 1, "Diff");
+    assert(diffDF.numColumns(&diffDF)==1);
+    const Series* diffS = diffDF.getSeries(&diffDF, 0);
+    assert(diffS && diffS->type == DF_INT);
+
+    int check=0;
+    bool gotVal = seriesGetInt(diffS, 0, &check);
+    assert(gotVal && check==1000);
+    seriesGetInt(diffS, 1, &check);
+    assert(check==1000);
+    seriesGetInt(diffS, 2, &check);
+    assert(check==0);
+
+    DataFrame_Destroy(&diffDF);
+    DataFrame_Destroy(&df);
+
+```
 # Date::DataFrame datetimeFilter(const DataFrame* df, size_t dateColIndex, long long startMs, long long endMs)
 | **Column Type** | **Row Value** (`msVal`) | **`startMs`**         | **`endMs`**           | **Filter Condition**                  | **Included in Result?**                         |
 |-----------------|-------------------------|------------------------|-----------------------|---------------------------------------|-------------------------------------------------|
