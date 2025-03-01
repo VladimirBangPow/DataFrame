@@ -4,33 +4,155 @@
 # Core::void Dataframe_Create(DataFrame* df)
 ![Create](diagrams/Create.png "Create")
 
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+```
+
 
 # Core::bool df.addSeries(DataFrame* df, const Series* s)
 
 ![AddSeries](diagrams/addSeries.png "AddSeries")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
 
+    // 1) Build some sample data
+    int intVals[] = { 10, 20, 30, 40 };
+    double doubleVals[] = { 1.5, 2.5, 3.25, 4.75 };
+    const char* stringVals[] = { "apple", "banana", "cherry", "date" };
+    long long datetimeVals[] = { 1677612345LL, 1677612400LL, 1677612500LL, 1677613000LL }; 
+    // E.g., some arbitrary epoch seconds
+
+    Series sInt = buildIntSeries("IntCol", intVals, 4);
+    Series sDouble = buildDoubleSeries("DoubleCol", doubleVals, 4);
+    Series sString = buildStringSeries("StrCol", stringVals, 4);
+    Series sDatetime = buildDatetimeSeries("TimeCol", datetimeVals, 4);
+
+    bool ok = df.addSeries(&df, &sInt);
+    ok = df.addSeries(&df, &sDouble);
+    ok = df.addSeries(&df, &sString);
+    ok = df.addSeries(&df, &sDatetime);
+
+    // We can free the local series copies now
+    seriesFree(&sInt);
+    seriesFree(&sDouble);
+    seriesFree(&sString);
+    seriesFree(&sDatetime);
+```
 
 
 # Core::const Series* df.getSeries(const DataFrame* df, size_t colIndex)
 ![GetSeries](diagrams/GetSeries.png "GetSeries")
 
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 1) Build some sample data
+    int intVals[] = { 10, 20, 30, 40 };
+
+    Series sInt = buildIntSeries("IntCol", intVals, 4);
+
+    bool ok = df.addSeries(&df, &sInt);
+
+    // We can free the local series copies now
+    seriesFree(&sInt);
+
+    const Series* col1 = df.getSeries(&df, 0);
+
+```
 
 # Core::size_t df.numColumns(const DataFrame* df)
 ![NColumns](diagrams/NColumns.png "NColumns")
 
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
 
+    // 1) Build some sample data
+    int intVals[] = { 10, 20, 30, 40 };
+
+    Series sInt = buildIntSeries("IntCol", intVals, 4);
+
+    bool ok = df.addSeries(&df, &sInt);
+
+    seriesFree(&sInt);
+
+    assert(df.numColumns(&df) == 1);
+
+```
 
 # Core::bool df.addRow(DataFrame* df, const void** rowData)
 ![AddRow](diagrams/AddRow.png "AddRow")
 
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
 
+    // 1) Build some sample data
+    int intVals[] = { 10, 20, 30, 40 };
+
+    Series sInt = buildIntSeries("IntCol", intVals, 4);
+
+    bool ok = df.addSeries(&df, &sInt);
+
+    seriesFree(&sInt);
+
+    int newValA = 50;
+    const void* rowData[] = { &newValA };
+
+    ok = df.addRow(&df, rowData);
+
+```
 
 # Core::bool df.getRow(DataFrame* df, size_t rowIndex, void** outRow)
 ![GetRow](diagrams/GetRow.png "GetRow")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
 
+    // 1) Build some sample data
+    int intVals[] = { 10, 20, 30, 40 };
+
+    Series sInt = buildIntSeries("IntCol", intVals, 4);
+
+    bool ok = df.addSeries(&df, &sInt);
+
+    seriesFree(&sInt);
+
+    void** rowData = NULL;
+    ok = df.getRow(&df, 2, &rowData);
+    int* pInt = (int*)rowData[0];
+    assert(pInt && *pInt==30);
+
+```
 
 # Core::size_t df.numRows(const DataFrame *df)
 ![NRows](diagrams/NRows.png "NRows")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 1) Build some sample data
+    int intVals[] = { 10, 20, 30, 40 };
+
+    Series sInt = buildIntSeries("IntCol", intVals, 4);
+
+    bool ok = df.addSeries(&df, &sInt);
+
+    seriesFree(&sInt);
+
+    assert(df.numRows(&df) == 4);
+
+```
 
 
 
