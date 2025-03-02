@@ -595,3 +595,88 @@
 
 ```
 
+
+# Date::DataFrame datetimeRound(const DataFrame* df, size_t colIndex, const char* unit)
+![datetimeRound](diagrams/datetimeRound.png "datetimeRound")
+
+| Original `msVal`      | Rounding Unit | New (Rounded) `msVal` | Explanation                                                                                     |
+|-----------------------|---------------|------------------------|-------------------------------------------------------------------------------------------------|
+| **1678871696789**     | `"minute"`    | **1678871700000**      | - Original ≈ 2023-03-15 12:34:56.789 UTC.<br/>- remainder = 789 ms ≥ 500 ⇒ round up to 12:34:57.<br/>- Now rounding to minute: 57 ≥ 30 ⇒ minute++ ⇒ 12:35:00.<br/>- Final epoch ms = 1678871700000. |
+| **1679003999123**     | `"day"`       | **1679001600000**      | - Original ≈ 2023-03-16 23:59:59.123 UTC.<br/>- remainder = 123 ms < 500 ⇒ remains 23:59:59.<br/>- Rounding to day: hour=23 ≥ 12 ⇒ next day ⇒ 2023-03-17 00:00:00.<br/>- Final epoch ms = 1679001600000. |
+| **1678838400650**     | `"second"`    | **1678838401000**      | - Original ≈ 2023-03-15 00:00:00.650 UTC.<br/>- remainder = 650 ms ≥ 500 ⇒ increment second ⇒ 00:00:01.<br/>- Rounding to second does nothing more ⇒ final epoch ms = 1678838401000. |
+| **1677871204000**     | `"hour"`      | **1677871200000**      | - Original ≈ 2023-03-03 11:00:04.000 UTC.<br/>- remainder=0, no change to seconds.<br/>- Rounding to hour: minute=0 but sec=4≥30? No, so hour stays 11 ⇒ zero out minutes & seconds ⇒ 2023-03-03 11:00:00.<br/>- Final epoch ms = 1677871200000. |
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Create a DF_DATETIME column with some known epoch-millis:
+    // Let's pick a base time: 2023-03-15 12:34:56.789 => epoch = 1678871696, leftover .789 ms
+    // Multiply by 1000 for ms => 1678871696789
+    long long baseMs = 1678871696789LL;
+    long long times[] = {
+        baseMs,                // ~ 12:34:56.789
+        baseMs + 501,         // ~ 12:34:57.290 (should round up to 12:34:58 if rounding second)
+        baseMs + 45*1000,     // ~ 12:35:41.789 (should test rounding minute)
+        baseMs + 3600*1000,   // ~ 13:34:56.789 (test hour rounding)
+        baseMs - 200LL        // negative remainder check near the boundary
+    };
+
+    Series sdt;
+    seriesInit(&sdt, "RoundTimes", DF_DATETIME);
+    for (int i = 0; i < 5; i++) {
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // We'll test a single rounding unit first: "second"
+    ok = df.datetimeRound(&df, 0, "second");
+    assert(ok);
+
+    // Validate row 0 => original remainder .789 => >= 500 => +1 sec
+    // row0 was 1678871696789 => break that into (seconds=1678871696, remainder=789).
+    // => final => 1678871697 in seconds => *1000 => 1678871697000
+    const Series* col = df.getSeries(&df, 0);
+    long long val = 0;
+    bool gotVal = seriesGetDateTime(col, 0, &val);
+    assert(gotVal);
+    assert(val == 1678871697000LL);
+
+    // Validate row 1 => was baseMs+501 => remainder ~ 501 => round up => +1 sec from base
+    // So we expect second = baseSec+1 => 1678871697 in seconds => 1678871697000 ms
+    seriesGetDateTime(col, 1, &val);
+    assert(val == 1678871697000LL);
+
+    // We won’t check all rows in detail here, but you can. Let’s at least confirm row 4 works.
+    seriesGetDateTime(col, 4, &val);
+    // row4 was baseMs - 200 => 1678871696589 => remainder=589 => round up => second=1678871697
+    assert(val == 1678871697000LL);
+
+    // Now let’s do "minute" rounding on row0 to see if it changes to 12:35:00
+    // We can re-round the entire column or re-add times. For simplicity, re-insert them:
+    DataFrame_Destroy(&df);
+    DataFrame_Create(&df);
+    seriesInit(&sdt, "RoundTimes", DF_DATETIME);
+    for (int i = 0; i < 5; i++) {
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+
+    // Round to minute
+    df.datetimeRound(&df, 0, "minute");
+
+    col = df.getSeries(&df, 0);
+    seriesGetDateTime(col, 0, &val);
+    // base => "12:34:56.789" => second=56 => >=30 => round up => minute=35 => new time=12:35:00
+    // Let's check the resulting epoch in UTC
+    // 12:35:00 on 2023-03-15 => epoch=1678871700 => in ms => 1678871700000
+    assert(val == 1678871700000LL);
+
+    DataFrame_Destroy(&df);
+
+```
+
