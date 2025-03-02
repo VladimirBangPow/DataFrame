@@ -4,21 +4,25 @@
 #include <math.h>
 #include <string.h>
 #include <stdbool.h>
-
+#include <float.h>
 #include "../dataframe.h"  // Make sure this has RowPredicate, RowFunction, etc.
 #include "../../Series/series.h"
 
 
 
-//Count
-//Median
-//Stddev
-//Variance
-//quantiles
+static int compareDoubles(const void* a, const void* b)
+{
+    double da = *(const double*)a;
+    double db = *(const double*)b;
+    // returns negative if da < db, 0 if equal, positive if da > db
+    if (da < db) return -1;
+    if (da > db) return 1;
+    return 0;
+}
 
 /* -------------------------------------------------------------------------
  * SUM
- * ------------------------------------------------------------------------- */
+ * -----------------------------------------------t-------------------------- */
 
 double dfSum_impl(const DataFrame* df, size_t colIndex)
 {
@@ -280,11 +284,6 @@ double dfMax_impl(const DataFrame* df, size_t colIndex)
 /* -------------------------------------------------------------------------
  * MEDIAN
  * ------------------------------------------------------------------------- */
-static int compareDoubles(const void* a, const void* b) {
-    double da = *(const double*)a;
-    double db = *(const double*)b;
-    return (da > db) - (da < db); // simple comparison
-}
 
 double dfMedian_impl(const DataFrame* df, size_t colIndex)
 {
@@ -823,15 +822,6 @@ double dfProduct_impl(const DataFrame* df, size_t colIndex)
 * Nth LARGEST/SMALLEST
 * ------------------------------------------------------------------------- */
 
-static int compareDoubles(const void* a, const void* b)
-{
-    double da = *(const double*)a;
-    double db = *(const double*)b;
-    // returns negative if da < db, 0 if equal, positive if da > db
-    if (da < db) return -1;
-    if (da > db) return 1;
-    return 0;
-}
 
 // comparator for descending order
 static int compareDoublesDescending(const void* a, const void* b)
@@ -2062,6 +2052,21 @@ DataFrame dfCumulativeMin_impl(const DataFrame* df, size_t colIndex)
     seriesFree(&cumminSeries);
 
     return result;
+}
+/* -------------------------------------------------------------------------
+* Standard Deviation
+* ------------------------------------------------------------------------- */
+double dfStd_impl(const DataFrame* df, size_t colIndex)
+{
+    // We can rely on dfVar_impl
+    extern double dfVar_impl(const DataFrame* df, size_t colIndex);
+
+    double var = dfVar_impl(df, colIndex);
+    if (var < 0.0) {
+        // or check if var is zero => maybe 0.0 std
+        return 0.0;
+    }
+    return sqrt(var);
 }
 
 /* -------------------------------------------------------------------------

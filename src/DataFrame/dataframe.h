@@ -94,13 +94,41 @@ typedef double (*DataFrameMeanFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMinFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMaxFunc)(const DataFrame* df, size_t colIndex);
 
+/* -------------------------------------------------------------------------
+ * ADDITIONAL AGGREGATIONS/TRANSFORMS
+ * ------------------------------------------------------------------------- */
+// We'll declare the rest returning double or DataFrame as needed:
+
+/* Additional stats returning double */
+typedef double (*DataFrameCountFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameMedianFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameModeFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameStdFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameVarFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameRangeFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameQuantileFunc)(const DataFrame* df, size_t colIndex, double q);
+typedef double (*DataFrameIQRFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameNullCountFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameUniqueCountFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameProductFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameNthLargestFunc)(const DataFrame* df, size_t colIndex, size_t n);
+typedef double (*DataFrameNthSmallestFunc)(const DataFrame* df, size_t colIndex, size_t n);
+typedef double (*DataFrameSkewnessFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameKurtosisFunc)(const DataFrame* df, size_t colIndex);
+typedef double (*DataFrameCovarianceFunc)(const DataFrame* df, size_t colIndex1, size_t colIndex2);
+typedef double (*DataFrameCorrelationFunc)(const DataFrame* df, size_t colIndexX, size_t colIndexY);
+
+/* Additional transforms returning DataFrame */
+typedef DataFrame (*DataFrameUniqueValuesFunc)(const DataFrame* df, size_t colIndex);
+typedef DataFrame (*DataFrameValueCountsFunc)(const DataFrame* df, size_t colIndex);
+typedef DataFrame (*DataFrameCumulativeSumFunc)(const DataFrame* df, size_t colIndex);
+typedef DataFrame (*DataFrameCumulativeProductFunc)(const DataFrame* df, size_t colIndex);
+typedef DataFrame (*DataFrameCumulativeMaxFunc)(const DataFrame* df, size_t colIndex);
+typedef DataFrame (*DataFrameCumulativeMinFunc)(const DataFrame* df, size_t colIndex);
+
 /* Other transforms */
 typedef DataFrame (*DataFrameTransposeFunc)(const DataFrame* df);
 typedef size_t    (*DataFrameIndexOfFunc)(const DataFrame* df, size_t colIndex, double value);
-
-/* 
-   For applying a RowFunction, we need the RowFunction type defined earlier:
-*/
 typedef DataFrame (*DataFrameApplyFunc)(const DataFrame* df, RowFunction);
 typedef DataFrame (*DataFrameWhereFunc)(const DataFrame* df, RowPredicate, double);
 typedef DataFrame (*DataFrameExplodeFunc)(const DataFrame* df, size_t colIndex);
@@ -157,9 +185,9 @@ typedef DataFrame (*DataFrameDatetimeBetweenFunc)(const DataFrame* df,
                                                   const char* formatType);
 
 typedef bool (*DataFrameDatetimeClampFunc)(const DataFrame* df,
-                                                size_t colIndex,
-                                                long long minMs,
-                                                long long maxMs);
+                                           size_t colIndex,
+                                           long long minMs,
+                                           long long maxMs);
 
 /* -------------------------------------------------------------------------
  * The DataFrame struct itself
@@ -204,6 +232,33 @@ struct DataFrame {
     DataFrameMinFunc               min;
     DataFrameMaxFunc               max;
 
+    // Additional aggregator pointers:
+    DataFrameCountFunc             count;
+    DataFrameMedianFunc            median;
+    DataFrameModeFunc              mode;
+    DataFrameStdFunc               std;
+    DataFrameVarFunc               var;
+    DataFrameRangeFunc             range;
+    DataFrameQuantileFunc          quantile;
+    DataFrameIQRFunc               iqr;
+    DataFrameNullCountFunc         nullCount;
+    DataFrameUniqueCountFunc       uniqueCount;
+    DataFrameProductFunc           product;
+    DataFrameNthLargestFunc        nthLargest;
+    DataFrameNthSmallestFunc       nthSmallest;
+    DataFrameSkewnessFunc          skewness;
+    DataFrameKurtosisFunc          kurtosis;
+    DataFrameCovarianceFunc        covariance;
+    DataFrameCorrelationFunc       correlation;
+
+    // Additional DataFrame-returning transforms
+    DataFrameUniqueValuesFunc      uniqueValues;
+    DataFrameValueCountsFunc       valueCounts;
+    DataFrameCumulativeSumFunc     cumulativeSum;
+    DataFrameCumulativeProductFunc cumulativeProduct;
+    DataFrameCumulativeMaxFunc     cumulativeMax;
+    DataFrameCumulativeMinFunc     cumulativeMin;
+
     /* Other transforms */
     DataFrameTransposeFunc         transpose;
     DataFrameIndexOfFunc           indexOf;
@@ -223,9 +278,9 @@ struct DataFrame {
     DataFrameColumnsFunc           cols;
 
     /* Combining */
-    DataFrameConcatFunc             concat;
-    DataFrameMergeFunc              merge;
-    DataFrameJoinFunc               join;
+    DataFrameConcatFunc            concat;
+    DataFrameMergeFunc             merge;
+    DataFrameJoinFunc              join;
 
     /* IO / Plotting / Conversion */
     DataFramePrintFunc             print;

@@ -46,6 +46,34 @@ extern double   dfMean_impl(const DataFrame* df, size_t colIndex);
 extern double   dfMin_impl(const DataFrame* df, size_t colIndex);
 extern double   dfMax_impl(const DataFrame* df, size_t colIndex);
 
+/* Additional aggregator impls (we assume you have them in some .c file) */
+extern double dfCount_impl(const DataFrame* df, size_t colIndex);
+extern double dfMedian_impl(const DataFrame* df, size_t colIndex);
+extern double dfMode_impl(const DataFrame* df, size_t colIndex);
+extern double dfStd_impl(const DataFrame* df, size_t colIndex);   // likely
+extern double dfVar_impl(const DataFrame* df, size_t colIndex);
+extern double dfRange_impl(const DataFrame* df, size_t colIndex);
+extern double dfQuantile_impl(const DataFrame* df, size_t colIndex, double q);
+extern double dfIQR_impl(const DataFrame* df, size_t colIndex);
+extern double dfNullCount_impl(const DataFrame* df, size_t colIndex);
+extern double dfUniqueCount_impl(const DataFrame* df, size_t colIndex);
+extern double dfProduct_impl(const DataFrame* df, size_t colIndex);
+extern double dfNthLargest_impl(const DataFrame* df, size_t colIndex, size_t n);
+extern double dfNthSmallest_impl(const DataFrame* df, size_t colIndex, size_t n);
+extern double dfSkewness_impl(const DataFrame* df, size_t colIndex);
+extern double dfKurtosis_impl(const DataFrame* df, size_t colIndex);
+extern double dfCovariance_impl(const DataFrame* df, size_t colIndex1, size_t colIndex2);
+extern double dfCorrelation_impl(const DataFrame* df, size_t colIndexX, size_t colIndexY);
+
+/* Additional DataFrame returning transforms */
+extern DataFrame dfUniqueValues_impl(const DataFrame* df, size_t colIndex);
+extern DataFrame dfValueCounts_impl(const DataFrame* df, size_t colIndex);
+extern DataFrame dfCumulativeSum_impl(const DataFrame* df, size_t colIndex);
+extern DataFrame dfCumulativeProduct_impl(const DataFrame* df, size_t colIndex);
+extern DataFrame dfCumulativeMax_impl(const DataFrame* df, size_t colIndex);
+extern DataFrame dfCumulativeMin_impl(const DataFrame* df, size_t colIndex);
+
+/* Others */
 extern DataFrame dfTranspose_impl(const DataFrame* df);
 extern size_t    dfIndexOf_impl(const DataFrame* df, size_t colIndex, double value);
 extern DataFrame dfApply_impl(const DataFrame* df, RowFunction);
@@ -95,7 +123,6 @@ extern bool dfDatetimeTruncate_impl(DataFrame* df,
                                     size_t colIndex,
                                     const char* unit);
 
-
 extern bool dfDatetimeAdd_impl(DataFrame* df,
                                 size_t dateColIndex,
                                 long long msToAdd);
@@ -124,6 +151,8 @@ extern bool dfDatetimeClamp_impl(const DataFrame* df,
                                     size_t colIndex,
                                     long long minMs,
                                     long long maxMs);
+
+
 /* -------------------------------------------------------------------------
  * Core Implementation Functions
  * ------------------------------------------------------------------------- */
@@ -184,11 +213,38 @@ void DataFrame_Create(DataFrame* df)
     df->dropDuplicates= dfDropDuplicates_impl;
     df->unique       = dfUnique_impl;
 
-    // Aggregation returning double:
+    // Basic Aggregations returning double:
     df->sum          = dfSum_impl;
     df->mean         = dfMean_impl;
     df->min          = dfMin_impl;
     df->max          = dfMax_impl;
+
+    // *** Additional aggregator pointers ***
+    df->count        = dfCount_impl;
+    df->median       = dfMedian_impl;
+    df->mode         = dfMode_impl;
+    df->std          = dfStd_impl;  // be sure you have an implementation
+    df->var          = dfVar_impl;
+    df->range        = dfRange_impl;
+    df->quantile     = dfQuantile_impl;
+    df->iqr          = dfIQR_impl;
+    df->nullCount    = dfNullCount_impl;
+    df->uniqueCount  = dfUniqueCount_impl;
+    df->product      = dfProduct_impl;
+    df->nthLargest   = dfNthLargest_impl;
+    df->nthSmallest  = dfNthSmallest_impl;
+    df->skewness     = dfSkewness_impl;
+    df->kurtosis     = dfKurtosis_impl;
+    df->covariance   = dfCovariance_impl;
+    df->correlation  = dfCorrelation_impl;
+
+    // Additional DataFrame returning transforms
+    df->uniqueValues     = dfUniqueValues_impl;
+    df->valueCounts      = dfValueCounts_impl;
+    df->cumulativeSum    = dfCumulativeSum_impl;
+    df->cumulativeProduct= dfCumulativeProduct_impl;
+    df->cumulativeMax    = dfCumulativeMax_impl;
+    df->cumulativeMin    = dfCumulativeMin_impl;
 
     // Others:
     df->transpose    = dfTranspose_impl;
@@ -481,5 +537,3 @@ bool dfGetRow_impl(const DataFrame* df, size_t rowIndex, void*** outRow)
     *outRow = rowData;
     return true;
 }
-
-
