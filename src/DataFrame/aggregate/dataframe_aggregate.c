@@ -6,11 +6,7 @@
 #include "../dataframe.h"  // Make sure this has RowPredicate, RowFunction, etc.
 
 
-//GroupBy
-//Sum
-//Min
-//Max
-//Mean
+
 //Count
 //Median
 //Stddev
