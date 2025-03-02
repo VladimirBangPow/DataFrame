@@ -853,3 +853,76 @@
 
     DataFrame_Destroy(&df);
 ```
+
+# DataFrame::Aggregate
+
+# Aggregate::double sum(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double mean(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double min(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double max(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double count(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double median(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double mode(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double std(const DataFrame* df, size_t colIndex)
+
+# Aggregate:: double var(const DataFrame* df, size_t colIndex)
+
+# Aggregate:: double range(const DataFrame* df, size_t colIndex)
+
+# Aggregate:: double quantile(const DataFrame* df, size_t colIndex, double q)
+
+# Aggregate:: double iqr(const DataFrame* df, size_t colIndex)
+
+# Aggregate:: double nullCount(const DataFrame* df, size_t colIndex)
+
+# Aggregate:: double uniqueCount(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double product(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double nthLargest(const DataFrame* df, size_t colIndex, size_t n)
+
+# Aggregate::double nthSmallest(const DataFrame* df, size_t colIndex, size_t n)
+
+# Aggregate::double skewness(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double kurtosis(const DataFrame* df, size_t colIndex)
+
+# Aggregate::double covariance(const DataFrame* df, size_t colIndex1, size_t colIndex2)
+
+# Aggregate::double correlation(const DataFrame* df, size_t colIndexX, size_t colIndexY)
+
+# Aggregate::DataFrame uniqueValues(const DataFrame* df, size_t colIndex)
+
+# Aggregate::DataFrame valueCounts(const DataFrame* df, size_t colIndex)
+
+# Aggregate::DataFrame cumulativeSum(const DataFrame* df, size_t colIndex)
+
+# Aggregate::DataFrame cumulativeProduct(const DataFrame* df, size_t colIndex)
+
+# Aggregate::DataFrame cumulativeMax(const DataFrame* df, size_t colIndex)
+
+# Aggregate::DataFrame cumulativeMin(const DataFrame* df, size_t colIndex)
+
+
+# Aggregate::DataFrame groupBy(const DataFrame* df, size_t groupColIndex)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
