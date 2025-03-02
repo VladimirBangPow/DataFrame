@@ -57,11 +57,11 @@ void seriesAddString(Series* s, const char* str) {
 }
 
 /* ---------------------------------------------------------------------------
- * Add a DateTime value (64-bit, e.g. microseconds since Unix epoch)
+ * Add a DateTime value (64-bit, e.g. milliseconds since Unix epoch)
  * --------------------------------------------------------------------------- */
-void seriesAddDateTime(Series* s, long long datetimeMicros) {
+void seriesAddDateTime(Series* s, long long datetimeMillis) {
     if (!s || s->type != DF_DATETIME) return;
-    daPushBack(&s->data, &datetimeMicros, sizeof(long long));
+    daPushBack(&s->data, &datetimeMillis, sizeof(long long));
 }
 
 /* ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ void seriesPrint(const Series* s) {
             printf("string");
             break;
         case DF_DATETIME:
-            printf("datetime (microseconds)");
+            printf("datetime (milliseconds)");
             break;
     }
     printf("), size = %zu\n", seriesSize(s));

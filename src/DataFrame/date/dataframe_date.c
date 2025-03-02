@@ -97,6 +97,21 @@ static long long parseEpochSec(const char* strVal, const char* formatType)
 }
 
 /**
+ * A helper function to set the datetime (long long) in a DF_DATETIME Series.
+ * This parallels seriesGetDateTime(...) but performs a 'set' operation.
+ */
+bool seriesSetDateTime(Series* s, size_t index, long long value) {
+    if (!s || s->type != DF_DATETIME) return false;
+    if (index >= daSize(&s->data)) return false;
+
+    long long* valPtr = (long long*)daGetMutable(&s->data, index);
+    if (!valPtr) return false;
+
+    *valPtr = value;
+    return true;
+}
+
+/**
  * dfConvertToDatetime_impl:
  *   - For DF_INT / DF_DOUBLE => convert numeric -> string -> parse => store final as epoch MS.
  *   - For DF_STRING => parse each row -> store final as epoch MS in DF_DATETIME column.
@@ -247,49 +262,45 @@ bool dfDatetimeToString_impl(
  *   - We assume the column is in MS
  *   - Convert MS => seconds => struct tm => add days => timegm => reconvert to MS
  */
-bool dfDatetimeAdd_impl(DataFrame* df,
-                        size_t dateColIndex,
-                        int daysToAdd)
+bool dfDatetimeAdd_impl(
+    DataFrame* df,
+    size_t dateColIndex,
+    long long msToAdd
+)
 {
     if (!df) return false;
+
     Series* s = (Series*)daGetMutable(&df->columns, dateColIndex);
     if (!s) return false;
     if (s->type != DF_DATETIME) {
-        fprintf(stderr, "dfDatetimeAdd_impl: col not DF_DATETIME.\n");
+        fprintf(stderr, "dfDatetimeAddMs_impl: col not DF_DATETIME.\n");
         return false;
     }
 
     size_t nRows = seriesSize(s);
-    for (size_t r=0; r<nRows; r++) {
-        long long msVal=0;
+    for (size_t r = 0; r < nRows; r++) {
+        long long msVal = 0;
         bool got = seriesGetDateTime(s, r, &msVal);
-        if (!got) continue;
+        if (!got) {
+            continue;  // skip invalid row
+        }
 
-        // convert msVal => seconds
-        long long seconds = msVal / 1000LL;
-        time_t tSec = (time_t)seconds;
-        struct tm* retTM = gmtime(&tSec);
-        if (!retTM) continue;
+        // Just add msToAdd directly
+        long long newMs = msVal + msToAdd;
 
-        struct tm tmVal = *retTM;
-        tmVal.tm_mday += daysToAdd;
+        // If negative => fallback to 0
+        if (newMs < 0) {
+            newMs = 0;
+        }
 
-        time_t newSec = timegm(&tmVal);
-        if (newSec<0) newSec=0;
-        long long newMs = ((long long)newSec)*1000LL;
-
+        // Store updated value back into the column
         *(long long*)daGetMutable(&s->data, r) = newMs;
     }
 
     return true;
 }
 
-/**
- * dfDatetimeDiff_impl:
- *   - We have two DF_DATETIME columns (ms).
- *   - Return the difference in "ms" or "seconds" in a new column? 
- *   Here we'll do "seconds difference" => DF_INT
- */
+
 DataFrame dfDatetimeDiff_impl(const DataFrame* df,
                               size_t col1Index,
                               size_t col2Index,
@@ -302,36 +313,50 @@ DataFrame dfDatetimeDiff_impl(const DataFrame* df,
     const Series* s1 = df->getSeries(df, col1Index);
     const Series* s2 = df->getSeries(df, col2Index);
     if (!s1 || !s2) return result;
+
+    // Both columns must be DF_DATETIME storing ms
     if (s1->type != DF_DATETIME || s2->type != DF_DATETIME) {
-        fprintf(stderr,"dfDatetimeDiff_impl: columns not DF_DATETIME.\n");
+        fprintf(stderr, "dfDatetimeDiff_impl: columns not DF_DATETIME.\n");
         return result;
     }
 
+    // We'll store the millisecond difference as a DF_INT (could overflow if huge)
     Series diffS;
     seriesInit(&diffS, newColName, DF_INT);
 
     size_t nRows = df->numRows(df);
-    for (size_t r=0; r<nRows; r++) {
-        long long ms1=0, ms2=0;
+
+    for (size_t r = 0; r < nRows; r++)
+    {
+        long long ms1 = 0, ms2 = 0;
         bool g1 = seriesGetDateTime(s1, r, &ms1);
         bool g2 = seriesGetDateTime(s2, r, &ms2);
-        if (!g1||!g2) {
+
+        if (!g1 || !g2)
+        {
+            // If either cell is invalid, store 0
             seriesAddInt(&diffS, 0);
             continue;
         }
-        // difference in seconds:
-        long long diffSec = (ms2 - ms1)/1000LL;
-        seriesAddInt(&diffS, (int)diffSec);
+
+        // difference in milliseconds
+        long long diffMs = (ms2 - ms1);
+
+        // Insert into DF_INT. Potential overflow if diffMs > 2^31-1 or < -2^31
+        seriesAddInt(&diffS, (int)diffMs);
     }
 
     bool ok = result.addSeries(&result, &diffS);
     seriesFree(&diffS);
 
-    if (!ok) {
+    if (!ok)
+    {
         DataFrame_Destroy(&result);
     }
+
     return result;
 }
+
 
 /**
  * dfDatetimeFilter_impl:
@@ -549,40 +574,272 @@ DataFrame dfDatetimeGroupBy_impl(const DataFrame* df,
     return grouped;
 }
 
-/**
- * dfDatetimeValidate_impl:
- *   - Keep only rows whose DF_DATETIME (ms) is in [minMs..maxMs]
- */
-typedef struct {
-    long long minVal;
-    long long maxVal;
-    size_t colIndex;
-} DTValidCtx;
 
-static DTValidCtx g_validCtx;
 
-static bool dtValidPredicate(const DataFrame* d,size_t row)
+bool dfDatetimeRound_impl(DataFrame* df, size_t colIndex, const char* unit)
 {
-    const Series* s= d->getSeries(d, g_validCtx.colIndex);
-    if(!s) return false;
-    long long msVal=0;
-    bool got= seriesGetDateTime(s, row,&msVal);
-    if(!got) return false;
-    return (msVal>= g_validCtx.minVal && msVal<= g_validCtx.maxVal);
+    if (!df) return false;
+
+    // Get the Series to round. Must be DF_DATETIME.
+    Series* s = (Series*)daGetMutable(&df->columns, colIndex);
+    if (!s || s->type != DF_DATETIME) return false;
+
+    size_t nRows = seriesSize(s);
+    for (size_t r = 0; r < nRows; r++)
+    {
+        long long msVal = 0;
+        bool got = seriesGetDateTime(s, r, &msVal);
+        if (!got) {
+            // skip rows we cannot read
+            continue;
+        }
+
+        // Split into total whole seconds and leftover milliseconds.
+        long long sec      = msVal / 1000LL;
+        long long remainder= msVal % 1000LL;
+
+        // Handle negative values gracefully: ensure remainder is [0..999].
+        // E.g., if msVal is negative, msVal % 1000 could be negative on some platforms.
+        if (remainder < 0) {
+            remainder += 1000;
+            sec       -= 1;
+        }
+
+        // Convert sec -> struct tm (UTC).
+        time_t tSec   = (time_t)sec;
+        struct tm* retTM = gmtime(&tSec);
+        if (!retTM) continue;
+
+        struct tm tmVal = *retTM;
+
+        // -----------------------------------------------------------------
+        // STEP 1: "Half-second" rounding. If remainder >= 500, increment tm_sec.
+        // This effectively rounds to the nearest second.
+        // -----------------------------------------------------------------
+        if (remainder >= 500) {
+            tmVal.tm_sec += 1;
+        }
+
+        // -----------------------------------------------------------------
+        // STEP 2: Additional rounding based on 'unit'.
+        //         (We’ve already handled second-level rounding above.)
+        // -----------------------------------------------------------------
+        if (strcmp(unit, "second") == 0) {
+            // second-level rounding is done; do nothing more
+        }
+        else if (strcmp(unit, "minute") == 0) {
+            // If tm_sec >= 30 => round up minute by 1
+            // (You can also include leftover ms check if you want extremely precise logic,
+            //  but typically the leftover ms is already accounted for in tm_sec by now.)
+            if (tmVal.tm_sec > 30 ||
+               (tmVal.tm_sec == 30 && remainder >= 500)) {
+                tmVal.tm_min += 1;
+            }
+            // zero out seconds
+            tmVal.tm_sec = 0;
+        }
+        else if (strcmp(unit, "hour") == 0) {
+            // If tm_min >= 30 => round up hour by 1
+            // Also consider if tm_min == 30 and tm_sec >= 30, etc.
+            if (tmVal.tm_min > 30 ||
+               (tmVal.tm_min == 30 && tmVal.tm_sec >= 30)) {
+                tmVal.tm_hour += 1;
+            }
+            tmVal.tm_min = 0;
+            tmVal.tm_sec = 0;
+        }
+        else if (strcmp(unit, "day") == 0) {
+            // If tm_hour >= 12 => round up day by 1
+            // You might also check if tm_hour == 12 && (tm_min >= 30 || tm_sec >= 30) 
+            if (tmVal.tm_hour > 12 ||
+               (tmVal.tm_hour == 12 && (tmVal.tm_min >= 30 || tmVal.tm_sec >= 30))) {
+                tmVal.tm_mday += 1;
+            }
+            tmVal.tm_hour = 0;
+            tmVal.tm_min  = 0;
+            tmVal.tm_sec  = 0;
+        }
+        else if (strcmp(unit, "month") == 0) {
+            // If tm_mday >= 16 => round up month (roughly half-month threshold)
+            if (tmVal.tm_mday > 15 ||
+               (tmVal.tm_mday == 15 && (tmVal.tm_hour >= 12))) {
+                tmVal.tm_mon += 1;
+                // handle month overflow
+                if (tmVal.tm_mon > 11) {
+                    tmVal.tm_mon  = 0;
+                    tmVal.tm_year += 1; // next year
+                }
+            }
+            tmVal.tm_mday = 1;
+            tmVal.tm_hour = 0;
+            tmVal.tm_min  = 0;
+            tmVal.tm_sec  = 0;
+        }
+        else if (strcmp(unit, "year") == 0) {
+            // If tm_mon >= 6 => round up year (roughly half-year threshold)
+            if (tmVal.tm_mon > 5 ||
+               (tmVal.tm_mon == 5 && (tmVal.tm_mday >= 16))) {
+                tmVal.tm_year += 1;
+            }
+            tmVal.tm_mon  = 0;  // January
+            tmVal.tm_mday = 1;
+            tmVal.tm_hour = 0;
+            tmVal.tm_min  = 0;
+            tmVal.tm_sec  = 0;
+        }
+        // else: unrecognized => no further action
+
+        // -----------------------------------------------------------------
+        // STEP 3: Convert adjusted struct tm back to epoch time
+        // -----------------------------------------------------------------
+        time_t newSec = timegm(&tmVal);  // On some platforms, you may need a replacement for timegm()
+        if (newSec < 0) {
+            newSec = 0; // fallback if negative
+        }
+
+        long long newMs = (long long)newSec * 1000LL;
+        // Finally, store this updated millisecond value back into the Series
+        seriesSetDateTime(s, r, newMs);
+    }
+
+    return true;
 }
 
-DataFrame dfDatetimeValidate_impl(const DataFrame* df,
-                                  size_t colIndex,
-                                  long long minMs,
-                                  long long maxMs)
+/**
+ * @brief Returns a new DataFrame filtered by date values in the specified column
+ *        that lie between `startStr` and `endStr` (inclusive).
+ *        The strings are parsed according to `formatType` (e.g., "%Y-%m-%d").
+ *
+ * If the user accidentally passes startMs > endMs, we swap them.
+ * We rely on a helper parseEpochSec(startStr, formatType) that returns time_t 
+ * (and 0 on failure), then convert to milliseconds.
+ */
+DataFrame dfDatetimeBetween_impl(const DataFrame* df,
+                                 size_t dateColIndex,
+                                 const char* startStr,
+                                 const char* endStr,
+                                 const char* formatType)
 {
+    // Create an empty DataFrame to return if anything fails
     DataFrame empty;
     DataFrame_Create(&empty);
-    if(!df) return empty;
 
-    g_validCtx.colIndex= colIndex;
-    g_validCtx.minVal  = minMs;
-    g_validCtx.maxVal  = maxMs;
+    if (!df || !startStr || !endStr || !formatType) {
+        return empty;
+    }
 
-    return df->filter(df, dtValidPredicate);
+    // 1) parse start/end strings -> epoch seconds
+    extern long long parseEpochSec(const char* datetimeStr, const char* fmt); 
+    long long startSec = parseEpochSec(startStr, formatType);  // returns 0 if fail
+    long long endSec   = parseEpochSec(endStr,   formatType);
+
+    // 2) Convert to milliseconds
+    long long startMs = startSec * 1000LL;
+    long long endMs   = endSec   * 1000LL;
+
+    // If startMs > endMs => swap them
+    if (startMs > endMs) {
+        long long tmp = startMs;
+        startMs = endMs;
+        endMs   = tmp;
+    }
+
+    // 3) Call df->datetimeFilter(...) to keep rows in [startMs..endMs]
+    return df->datetimeFilter(df, dateColIndex, startMs, endMs);
+}
+
+/**
+ * @brief Re-base each datetime value in the specified column by subtracting
+ *        `anchorMs`. If (value - anchorMs) < 0, clamp to 0.
+ */
+bool dfDatetimeRebase_impl(DataFrame* df, size_t colIndex, long long anchorMs)
+{
+    if (!df) {
+        fprintf(stderr, "dfDatetimeRebase_impl: invalid df.\n");
+        return false;
+    }
+
+    // Fetch the column
+    Series* s = (Series*)daGetMutable(&df->columns, colIndex);
+    if (!s) {
+        fprintf(stderr, "dfDatetimeRebase_impl: invalid colIndex.\n");
+        return false;
+    }
+    // Must be DF_DATETIME
+    if (s->type != DF_DATETIME) {
+        fprintf(stderr, "dfDatetimeRebase_impl: not DF_DATETIME.\n");
+        return false;
+    }
+
+    size_t nRows = seriesSize(s);
+
+    // For each row => (msVal - anchorMs)
+    for (size_t r = 0; r < nRows; r++)
+    {
+        long long msVal = 0;
+        bool got = seriesGetDateTime(s, r, &msVal);
+        if (!got) {
+            // if reading fails => skip or set to 0
+            continue;
+        }
+
+        long long newMs = msVal - anchorMs;
+        // Optionally clamp negative to 0
+        if (newMs < 0) {
+            newMs = 0;
+        }
+
+        // Store updated value using seriesSetDateTime
+        seriesSetDateTime(s, r, newMs);
+    }
+
+    return true;
+}
+
+/**
+ * @brief Clamps each datetime in the given column to be within [minMs, maxMs].
+ *        Any value < minMs is set to minMs; any value > maxMs is set to maxMs.
+ */
+bool dfDatetimeClamp_impl(DataFrame* df,
+                          size_t colIndex,
+                          long long minMs,
+                          long long maxMs)
+{
+    if (!df) {
+        fprintf(stderr, "dfDatetimeClamp_impl: invalid df pointer.\n");
+        return false;
+    }
+
+    // Fetch the Series; must be DF_DATETIME
+    Series* s = (Series*)daGetMutable(&df->columns, colIndex);
+    if (!s) {
+        fprintf(stderr, "dfDatetimeClamp_impl: invalid colIndex.\n");
+        return false;
+    }
+    if (s->type != DF_DATETIME) {
+        fprintf(stderr, "dfDatetimeClamp_impl: not DF_DATETIME.\n");
+        return false;
+    }
+
+    size_t nRows = seriesSize(s);
+    for (size_t r = 0; r < nRows; r++) {
+        long long msVal = 0;
+        bool got = seriesGetDateTime(s, r, &msVal);
+        if (!got) {
+            // If reading fails for a row, skip or optionally set to minMs
+            continue;
+        }
+
+        // Clamp
+        if (msVal < minMs) {
+            msVal = minMs;
+        } else if (msVal > maxMs) {
+            msVal = maxMs;
+        }
+
+        // Store back
+        seriesSetDateTime(s, r, msVal);
+    }
+
+    return true;
 }

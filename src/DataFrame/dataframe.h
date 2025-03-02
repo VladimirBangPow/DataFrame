@@ -132,7 +132,7 @@ typedef bool  (*DataFrameDatetimeTruncateFunc)(DataFrame* df,
                                                 const char* unit);
 typedef bool  (*DataFrameDatetimeAddFunc)(DataFrame* df,
                                            size_t dateColIndex,
-                                           int daysToAdd);
+                                           long long msToAdd);
 typedef DataFrame  (*DataFrameDatetimeDiffFunc)(const DataFrame* df,
                                                 size_t col1Index,
                                                 size_t col2Index,
@@ -145,10 +145,21 @@ typedef DataFrame (*DataFrameDatetimeExtractFunc)(const DataFrame* df,
 typedef DataFrame (*DataFrameDatetimeGroupByFunc)(const DataFrame* df, 
                                                    size_t dateColIndex,
                                                    const char* truncateUnit);
-typedef DataFrame (*DataFrameDatetimeValidateFunc)(const DataFrame* df,
-                                                    size_t colIndex,
-                                                    long long minEpoch,
-                                                    long long maxEpoch);
+
+typedef bool (*DataFrameDatetimeRoundFunc)(DataFrame* df, size_t colIndex, const char* unit);
+
+typedef bool (*DataFrameDatetimeRebaseFunc)(DataFrame* df, size_t colIndex, long long anchorMs);
+
+typedef DataFrame (*DataFrameDatetimeBetweenFunc)(const DataFrame* df,
+                                                  size_t dateColIndex,
+                                                  const char* startStr,
+                                                  const char* endStr,
+                                                  const char* formatType);
+
+typedef bool (*DataFrameDatetimeClampFunc)(const DataFrame* df,
+                                                size_t colIndex,
+                                                long long minMs,
+                                                long long maxMs);
 
 /* -------------------------------------------------------------------------
  * The DataFrame struct itself
@@ -230,7 +241,10 @@ struct DataFrame {
     DataFrameDatetimeDiffFunc      datetimeDiff;
     DataFrameDatetimeExtractFunc   datetimeExtract;
     DataFrameDatetimeGroupByFunc   datetimeGroupBy;
-    DataFrameDatetimeValidateFunc  datetimeValidate;
+    DataFrameDatetimeRoundFunc     datetimeRound;
+    DataFrameDatetimeRebaseFunc    datetimeRebase;
+    DataFrameDatetimeBetweenFunc   datetimeBetween;
+    DataFrameDatetimeClampFunc     datetimeClamp;
 };
 
 /* -------------------------------------------------------------------------

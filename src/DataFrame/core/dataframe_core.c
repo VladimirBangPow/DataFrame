@@ -98,7 +98,7 @@ extern bool dfDatetimeTruncate_impl(DataFrame* df,
 
 extern bool dfDatetimeAdd_impl(DataFrame* df,
                                 size_t dateColIndex,
-                                int daysToAdd);
+                                long long msToAdd);
 
 extern DataFrame dfDatetimeDiff_impl(const DataFrame* df,
                                     size_t col1Index,
@@ -113,11 +113,17 @@ extern DataFrame dfDatetimeGroupBy_impl(const DataFrame* df,
                                         size_t dateColIndex,
                                         const char* truncateUnit);
 
-extern DataFrame dfDatetimeValidate_impl(const DataFrame* df,
-                                         size_t colIndex,
-                                         long long minEpoch,
-                                         long long maxEpoch);
-
+extern bool dfDatetimeRound_impl(DataFrame* df, size_t colIndex, const char* unit);
+extern bool dfDatetimeRebase_impl(DataFrame* df, size_t colIndex, long long anchorMs);
+extern DataFrame dfDatetimeBetween_impl(const DataFrame* df,
+                                        size_t dateColIndex,
+                                        const char* startStr,
+                                        const char* endStr,
+                                        const char* formatType);
+extern bool dfDatetimeClamp_impl(const DataFrame* df,
+                                    size_t colIndex,
+                                    long long minMs,
+                                    long long maxMs);
 /* -------------------------------------------------------------------------
  * Core Implementation Functions
  * ------------------------------------------------------------------------- */
@@ -216,8 +222,10 @@ void DataFrame_Create(DataFrame* df)
     df->datetimeDiff      = dfDatetimeDiff_impl;
     df->datetimeExtract   = dfDatetimeExtract_impl;
     df->datetimeGroupBy   = dfDatetimeGroupBy_impl;
-    df->datetimeValidate  = dfDatetimeValidate_impl;
-
+    df->datetimeRound     = dfDatetimeRound_impl;
+    df->datetimeRebase    = dfDatetimeRebase_impl;
+    df->datetimeBetween   = dfDatetimeBetween_impl;
+    df->datetimeClamp     = dfDatetimeClamp_impl;
 
     // Combining:
     df->concat       = dfConcat_impl;
