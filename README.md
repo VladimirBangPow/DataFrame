@@ -800,3 +800,56 @@
     DataFrame_Destroy(&df);
 
 ```
+
+# Date::bool datetimeClamp(const DataFrame* df, size_t colIndex, long long minMs, long long maxMs)
+![datetimeClamp](diagrams/datetimeClamp.png "datetimeClamp")
+
+| **Original `msVal`** | **`minMs`** | **`maxMs`** | **Computed `msVal`**                     | **Explanation**                                                                                               |
+|----------------------|------------:|------------:|-------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| **1,000**           |       2,000 |      10,000 | **2,000**                                 | - `1,000` < `minMs` => clamped up to `2,000`.                                                                 |
+| **5,000**           |       2,000 |      10,000 | **5,000**                                 | - Already within `[2,000..10,000]` => remains `5,000`.                                                        |
+| **15,000**          |       2,000 |      10,000 | **10,000**                                | - `15,000` > `maxMs` => clamped down to `10,000`.                                                             |
+| **1,999**           |       2,000 |      10,000 | **2,000**                                 | - Just below `minMs` => clamped up to `2,000`.                                                                |
+| **9,999**           |       2,000 |      10,000 | **9,999**                                 | - Falls within the range => unchanged.                                                                        |
+| **-500**            |       2,000 |      10,000 | **2,000**                                 | - Negative value => also clamped up to `2,000`.                                                               |
+
+
+## Usage:
+
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Create a DF_DATETIME col => 10, 50, 100, 9999
+    Series sdt;
+    seriesInit(&sdt, "ClampTest", DF_DATETIME);
+    long long vals[] = {10LL, 50LL, 100LL, 9999LL};
+    for (int i=0; i<4; i++) {
+        seriesAddDateTime(&sdt, vals[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // clamp => min=20, max=9000
+    // => 10 => 20
+    // => 50 => 50
+    // => 100 => 100
+    // => 9999 => 9000
+    ok = df.datetimeClamp(&df, 0, 20LL, 9000LL);
+    assert(ok);
+
+    const Series* col = df.getSeries(&df, 0);
+    long long val=0;
+
+    seriesGetDateTime(col, 0, &val);
+    assert(val == 20LL);
+    seriesGetDateTime(col, 1, &val);
+    assert(val == 50LL);
+    seriesGetDateTime(col, 2, &val);
+    assert(val == 100LL);
+    seriesGetDateTime(col, 3, &val);
+    assert(val == 9000LL);
+
+    DataFrame_Destroy(&df);
+```
