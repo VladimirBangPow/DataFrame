@@ -14,6 +14,7 @@ int main(void)
 {
     testCore();
     testDate();
+    testAggregate();
 
     // testQuery();
     // testPrint();
@@ -22,6 +23,5 @@ int main(void)
     // testIndexing();
     // testCombine();
     // testReshape();
-    // testAggregate();
     return 0;
 }
