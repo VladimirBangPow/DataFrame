@@ -596,7 +596,7 @@
 ```
 
 
-# Date::DataFrame datetimeRound(const DataFrame* df, size_t colIndex, const char* unit)
+# Date::bool datetimeRound(const DataFrame* df, size_t colIndex, const char* unit)
 ![datetimeRound](diagrams/datetimeRound.png "datetimeRound")
 
 | Original `msVal`      | Rounding Unit | New (Rounded) `msVal` | Explanation                                                                                     |
@@ -741,6 +741,62 @@
     assert(val == 1678924800000LL);
 
     DataFrame_Destroy(&result);
+    DataFrame_Destroy(&df);
+
+```
+
+
+
+# Date::bool datetimeRebase(const DataFrame* df, size_t colIndex, long long anchorMs)
+![datetimeRebase](diagrams/datetimeRebase.png "datetimeRebase")
+
+
+| **Original `msVal`** | **`anchorMs`** | **Computation**                  | **New (Rebased) `msVal`** | **Explanation**                                                         |
+|----------------------|---------------:|----------------------------------|---------------------------:|-------------------------------------------------------------------------|
+| **10,000**          |         5,000  | `newMs = (10000 - 5000) = 5000`  | **5000**                   | - Original value = 10,000 ms.<br>- Subtract anchor=5,000 ms => 5,000 ms.<br>- 5,000 ≥ 0, so no clamp needed.                                       |
+| **2,000**           |         3,000  | `newMs = (2000 - 3000) = -1000`  | **0**                      | - Original = 2,000 ms.<br>- Subtract anchor=3,000 => -1,000.<br>- Negative => clamp to 0.                                                         |
+| **123,456,789**     |    100,000,000 | `newMs = (123,456,789 - 100,000,000) = 23,456,789` | **23,456,789**           | - Original = 123,456,789 ms (~1.43 days from epoch).<br>- Anchor=100,000,000 => result=23,456,789 ms.                                             |
+| **1,000**           |         1,000  | `newMs = (1000 - 1000) = 0`      | **0**                      | - Perfect offset => exactly zero after rebase.<br>- No clamp needed.                                        |
+| **500**             |         500    | `newMs = (500 - 500) = 0`        | **0**                      | - Another example => results in 0.                                                                          |
+| **2,500**           |         500    | `newMs = (2500 - 500) = 2000`    | **2,000**                  | - Subtract anchor => 2,000 ms.                                                                              |
+
+
+## Usage:
+
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    Series sdt;
+    seriesInit(&sdt, "RebaseTest", DF_DATETIME);
+    // We'll store times: 1000, 2000, 3000, 500
+    long long times[] = {1000LL, 2000LL, 3000LL, 500LL};
+    for (int i=0; i<4; i++) {
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // rebase with anchor=1500 => newVal = oldVal -1500, clamp >=0
+    // so => row0=1000 => -500 => clamp=0
+    //        row1=2000 => 500
+    //        row2=3000 => 1500
+    //        row3=500  => -1000 => clamp=0
+    ok = df.datetimeRebase(&df, 0, 1500LL);
+    assert(ok);
+
+    const Series* col = df.getSeries(&df, 0);
+    long long val=0;
+    seriesGetDateTime(col, 0, &val);
+    assert(val == 0LL);
+    seriesGetDateTime(col, 1, &val);
+    assert(val == 500LL);
+    seriesGetDateTime(col, 2, &val);
+    assert(val == 1500LL);
+    seriesGetDateTime(col, 3, &val);
+    assert(val == 0LL);
+
     DataFrame_Destroy(&df);
 
 ```
