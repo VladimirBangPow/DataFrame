@@ -680,3 +680,67 @@
 
 ```
 
+# Date::DataFrame datetimeBetween(const DataFrame* df, size_t dateColIndex, const char* startStr, const char* endStr, const char* formatType)
+![datetimeBetween](diagrams/datetimeBetween.png "datetimeBetween")
+
+| **Input**                                                      | **Parsed Range**                                      | **Output**                                                                                                          | **Explanation**                                                                                                                                                                                               |
+|----------------------------------------------------------------|--------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `startStr = "2023-03-15 00:00:00", endStr = "2023-03-16 00:00:00"`<br>`formatType = "%Y-%m-%d %H:%M:%S"` | - `parseEpochSec("2023-03-15 00:00:00")` => `1678838400` (seconds)<br>- `parseEpochSec("2023-03-16 00:00:00")` => `1678924800`<br>- Converted to ms => `[1678838400000..1678924800000]` | A new `DataFrame` containing **only rows** whose timestamp in `colIndex` is within **[1678838400000..1678924800000]** (inclusive). | - The function multiplies each parsed epoch-second by 1000 to get milliseconds.<br>- It then calls `df->datetimeFilter(...)`, filtering rows where `DF_DATETIME` ∈ [1678838400000..1678924800000].                                                    |
+| `startStr = "2023-03-20", endStr = "2023-03-15"`<br>`formatType = "%Y-%m-%d"`                            | - Suppose `"2023-03-20"` => `1679270400` (sec)<br>- `"2023-03-15"` => `1678838400` (sec)<br>- Ms => `[1679270400000..1678838400000]` but swapped ⇒ `[1678838400000..1679270400000]` | Similar `DataFrame` subset, but the range is **[1678838400000..1679270400000]** after swap.                                    | - If `startMs > endMs`, the code swaps them, ensuring the final filter range is always ascending.<br>- Only rows within that millisecond window remain in the returned `DataFrame`.                                                                  |
+| `startStr = "invalid date", endStr = "2023-03-15 12:00:00"`<br>`formatType = "%Y-%m-%d %H:%M:%S"`        | - `parseEpochSec("invalid date", ...)` => 0 (failure)<br>- `parseEpochSec("2023-03-15 12:00:00", ...)` => `1678872000` (sec) => `1678872000000` (ms)<br>- Final range => `[0..1678872000000]` | Any row with a timestamp ≤ 1678872000000 ms is kept.                                                                            | - An invalid date string returns `0`, so `startMs = 0`.<br>- `endMs` is ~ `1678872000000`.<br>- The final filter is `[0..1678872000000]`, meaning rows at or after the Unix epoch but before 2023-03-15 12:00:00 remain.                              |
+
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    
+    long long times[] = {
+        1678838400LL * 1000, // "2023-03-15 00:00:00" in MILLISECONDS
+        1678871696LL * 1000, // "2023-03-15 9:14:56"
+        1678924800LL * 1000, // "2023-03-16 00:00:00"
+        1679000000LL * 1000  // "2023-03-16 20:53:20"
+    };
+    
+
+    Series sdt;
+    seriesInit(&sdt, "BetweenTest", DF_DATETIME);
+    for (int i = 0; i < 4; i++) {
+        // Storing raw seconds. If your code expects ms in DF_DATETIME,
+        // multiply by 1000. But we'll store seconds for clarity here.
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // We'll keep rows between "2023-03-15 12:00:00" and "2023-03-16 00:00:00" inclusive
+    // => start=1678862400, end=1678924800
+    DataFrame result = df.datetimeBetween(
+        &df,              // inDF
+        0,                // dateColIndex
+        "2023-03-15 9:13:00",  // start
+        "2023-03-16 00:00:00",  // end
+        "%Y-%m-%d %H:%M:%S"     // format
+    );
+
+    // The only rows in that range:
+    //   times[1] = 1678871696000 => ~ 2023-03-15 12:34:56
+    //   times[2] = 1678924800000 => 2023-03-16 00:00:00 (inclusive)
+    assert(result.numRows(&result) == 2);
+    result.print(&result);
+    const Series* sres = result.getSeries(&result, 0);
+    long long val=0;
+    // row0 => 1678871696
+    bool gotVal = seriesGetDateTime(sres, 0, &val);
+    assert(gotVal && val == 1678871696000LL);
+    // row1 => 1678924800
+    seriesGetDateTime(sres, 1, &val);
+    assert(val == 1678924800000LL);
+
+    DataFrame_Destroy(&result);
+    DataFrame_Destroy(&df);
+
+```
