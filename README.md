@@ -595,3 +595,261 @@
 
 ```
 
+
+# Date::bool datetimeRound(const DataFrame* df, size_t colIndex, const char* unit)
+![datetimeRound](diagrams/datetimeRound.png "datetimeRound")
+
+| Original `msVal`      | Rounding Unit | New (Rounded) `msVal` | Explanation                                                                                     |
+|-----------------------|---------------|------------------------|-------------------------------------------------------------------------------------------------|
+| **1678871696789**     | `"minute"`    | **1678871700000**      | - Original ≈ 2023-03-15 12:34:56.789 UTC.<br/>- remainder = 789 ms ≥ 500 ⇒ round up to 12:34:57.<br/>- Now rounding to minute: 57 ≥ 30 ⇒ minute++ ⇒ 12:35:00.<br/>- Final epoch ms = 1678871700000. |
+| **1679003999123**     | `"day"`       | **1679001600000**      | - Original ≈ 2023-03-16 23:59:59.123 UTC.<br/>- remainder = 123 ms < 500 ⇒ remains 23:59:59.<br/>- Rounding to day: hour=23 ≥ 12 ⇒ next day ⇒ 2023-03-17 00:00:00.<br/>- Final epoch ms = 1679001600000. |
+| **1678838400650**     | `"second"`    | **1678838401000**      | - Original ≈ 2023-03-15 00:00:00.650 UTC.<br/>- remainder = 650 ms ≥ 500 ⇒ increment second ⇒ 00:00:01.<br/>- Rounding to second does nothing more ⇒ final epoch ms = 1678838401000. |
+| **1677871204000**     | `"hour"`      | **1677871200000**      | - Original ≈ 2023-03-03 11:00:04.000 UTC.<br/>- remainder=0, no change to seconds.<br/>- Rounding to hour: minute=0 but sec=4≥30? No, so hour stays 11 ⇒ zero out minutes & seconds ⇒ 2023-03-03 11:00:00.<br/>- Final epoch ms = 1677871200000. |
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Create a DF_DATETIME column with some known epoch-millis:
+    // Let's pick a base time: 2023-03-15 12:34:56.789 => epoch = 1678871696, leftover .789 ms
+    // Multiply by 1000 for ms => 1678871696789
+    long long baseMs = 1678871696789LL;
+    long long times[] = {
+        baseMs,                // ~ 12:34:56.789
+        baseMs + 501,         // ~ 12:34:57.290 (should round up to 12:34:58 if rounding second)
+        baseMs + 45*1000,     // ~ 12:35:41.789 (should test rounding minute)
+        baseMs + 3600*1000,   // ~ 13:34:56.789 (test hour rounding)
+        baseMs - 200LL        // negative remainder check near the boundary
+    };
+
+    Series sdt;
+    seriesInit(&sdt, "RoundTimes", DF_DATETIME);
+    for (int i = 0; i < 5; i++) {
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // We'll test a single rounding unit first: "second"
+    ok = df.datetimeRound(&df, 0, "second");
+    assert(ok);
+
+    // Validate row 0 => original remainder .789 => >= 500 => +1 sec
+    // row0 was 1678871696789 => break that into (seconds=1678871696, remainder=789).
+    // => final => 1678871697 in seconds => *1000 => 1678871697000
+    const Series* col = df.getSeries(&df, 0);
+    long long val = 0;
+    bool gotVal = seriesGetDateTime(col, 0, &val);
+    assert(gotVal);
+    assert(val == 1678871697000LL);
+
+    // Validate row 1 => was baseMs+501 => remainder ~ 501 => round up => +1 sec from base
+    // So we expect second = baseSec+1 => 1678871697 in seconds => 1678871697000 ms
+    seriesGetDateTime(col, 1, &val);
+    assert(val == 1678871697000LL);
+
+    // We won’t check all rows in detail here, but you can. Let’s at least confirm row 4 works.
+    seriesGetDateTime(col, 4, &val);
+    // row4 was baseMs - 200 => 1678871696589 => remainder=589 => round up => second=1678871697
+    assert(val == 1678871697000LL);
+
+    // Now let’s do "minute" rounding on row0 to see if it changes to 12:35:00
+    // We can re-round the entire column or re-add times. For simplicity, re-insert them:
+    DataFrame_Destroy(&df);
+    DataFrame_Create(&df);
+    seriesInit(&sdt, "RoundTimes", DF_DATETIME);
+    for (int i = 0; i < 5; i++) {
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+
+    // Round to minute
+    df.datetimeRound(&df, 0, "minute");
+
+    col = df.getSeries(&df, 0);
+    seriesGetDateTime(col, 0, &val);
+    // base => "12:34:56.789" => second=56 => >=30 => round up => minute=35 => new time=12:35:00
+    // Let's check the resulting epoch in UTC
+    // 12:35:00 on 2023-03-15 => epoch=1678871700 => in ms => 1678871700000
+    assert(val == 1678871700000LL);
+
+    DataFrame_Destroy(&df);
+
+```
+
+# Date::DataFrame datetimeBetween(const DataFrame* df, size_t dateColIndex, const char* startStr, const char* endStr, const char* formatType)
+![datetimeBetween](diagrams/datetimeBetween.png "datetimeBetween")
+
+| **Input**                                                      | **Parsed Range**                                      | **Output**                                                                                                          | **Explanation**                                                                                                                                                                                               |
+|----------------------------------------------------------------|--------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `startStr = "2023-03-15 00:00:00", endStr = "2023-03-16 00:00:00"`<br>`formatType = "%Y-%m-%d %H:%M:%S"` | - `parseEpochSec("2023-03-15 00:00:00")` => `1678838400` (seconds)<br>- `parseEpochSec("2023-03-16 00:00:00")` => `1678924800`<br>- Converted to ms => `[1678838400000..1678924800000]` | A new `DataFrame` containing **only rows** whose timestamp in `colIndex` is within **[1678838400000..1678924800000]** (inclusive). | - The function multiplies each parsed epoch-second by 1000 to get milliseconds.<br>- It then calls `df->datetimeFilter(...)`, filtering rows where `DF_DATETIME` ∈ [1678838400000..1678924800000].                                                    |
+| `startStr = "2023-03-20", endStr = "2023-03-15"`<br>`formatType = "%Y-%m-%d"`                            | - Suppose `"2023-03-20"` => `1679270400` (sec)<br>- `"2023-03-15"` => `1678838400` (sec)<br>- Ms => `[1679270400000..1678838400000]` but swapped ⇒ `[1678838400000..1679270400000]` | Similar `DataFrame` subset, but the range is **[1678838400000..1679270400000]** after swap.                                    | - If `startMs > endMs`, the code swaps them, ensuring the final filter range is always ascending.<br>- Only rows within that millisecond window remain in the returned `DataFrame`.                                                                  |
+| `startStr = "invalid date", endStr = "2023-03-15 12:00:00"`<br>`formatType = "%Y-%m-%d %H:%M:%S"`        | - `parseEpochSec("invalid date", ...)` => 0 (failure)<br>- `parseEpochSec("2023-03-15 12:00:00", ...)` => `1678872000` (sec) => `1678872000000` (ms)<br>- Final range => `[0..1678872000000]` | Any row with a timestamp ≤ 1678872000000 ms is kept.                                                                            | - An invalid date string returns `0`, so `startMs = 0`.<br>- `endMs` is ~ `1678872000000`.<br>- The final filter is `[0..1678872000000]`, meaning rows at or after the Unix epoch but before 2023-03-15 12:00:00 remain.                              |
+
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    
+    long long times[] = {
+        1678838400LL * 1000, // "2023-03-15 00:00:00" in MILLISECONDS
+        1678871696LL * 1000, // "2023-03-15 9:14:56"
+        1678924800LL * 1000, // "2023-03-16 00:00:00"
+        1679000000LL * 1000  // "2023-03-16 20:53:20"
+    };
+    
+
+    Series sdt;
+    seriesInit(&sdt, "BetweenTest", DF_DATETIME);
+    for (int i = 0; i < 4; i++) {
+        // Storing raw seconds. If your code expects ms in DF_DATETIME,
+        // multiply by 1000. But we'll store seconds for clarity here.
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // We'll keep rows between "2023-03-15 12:00:00" and "2023-03-16 00:00:00" inclusive
+    // => start=1678862400, end=1678924800
+    DataFrame result = df.datetimeBetween(
+        &df,              // inDF
+        0,                // dateColIndex
+        "2023-03-15 9:13:00",  // start
+        "2023-03-16 00:00:00",  // end
+        "%Y-%m-%d %H:%M:%S"     // format
+    );
+
+    // The only rows in that range:
+    //   times[1] = 1678871696000 => ~ 2023-03-15 12:34:56
+    //   times[2] = 1678924800000 => 2023-03-16 00:00:00 (inclusive)
+    assert(result.numRows(&result) == 2);
+    result.print(&result);
+    const Series* sres = result.getSeries(&result, 0);
+    long long val=0;
+    // row0 => 1678871696
+    bool gotVal = seriesGetDateTime(sres, 0, &val);
+    assert(gotVal && val == 1678871696000LL);
+    // row1 => 1678924800
+    seriesGetDateTime(sres, 1, &val);
+    assert(val == 1678924800000LL);
+
+    DataFrame_Destroy(&result);
+    DataFrame_Destroy(&df);
+
+```
+
+
+
+# Date::bool datetimeRebase(const DataFrame* df, size_t colIndex, long long anchorMs)
+![datetimeRebase](diagrams/datetimeRebase.png "datetimeRebase")
+
+
+| **Original `msVal`** | **`anchorMs`** | **Computation**                  | **New (Rebased) `msVal`** | **Explanation**                                                         |
+|----------------------|---------------:|----------------------------------|---------------------------:|-------------------------------------------------------------------------|
+| **10,000**          |         5,000  | `newMs = (10000 - 5000) = 5000`  | **5000**                   | - Original value = 10,000 ms.<br>- Subtract anchor=5,000 ms => 5,000 ms.<br>- 5,000 ≥ 0, so no clamp needed.                                       |
+| **2,000**           |         3,000  | `newMs = (2000 - 3000) = -1000`  | **0**                      | - Original = 2,000 ms.<br>- Subtract anchor=3,000 => -1,000.<br>- Negative => clamp to 0.                                                         |
+| **123,456,789**     |    100,000,000 | `newMs = (123,456,789 - 100,000,000) = 23,456,789` | **23,456,789**           | - Original = 123,456,789 ms (~1.43 days from epoch).<br>- Anchor=100,000,000 => result=23,456,789 ms.                                             |
+| **1,000**           |         1,000  | `newMs = (1000 - 1000) = 0`      | **0**                      | - Perfect offset => exactly zero after rebase.<br>- No clamp needed.                                        |
+| **500**             |         500    | `newMs = (500 - 500) = 0`        | **0**                      | - Another example => results in 0.                                                                          |
+| **2,500**           |         500    | `newMs = (2500 - 500) = 2000`    | **2,000**                  | - Subtract anchor => 2,000 ms.                                                                              |
+
+
+## Usage:
+
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    Series sdt;
+    seriesInit(&sdt, "RebaseTest", DF_DATETIME);
+    // We'll store times: 1000, 2000, 3000, 500
+    long long times[] = {1000LL, 2000LL, 3000LL, 500LL};
+    for (int i=0; i<4; i++) {
+        seriesAddDateTime(&sdt, times[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // rebase with anchor=1500 => newVal = oldVal -1500, clamp >=0
+    // so => row0=1000 => -500 => clamp=0
+    //        row1=2000 => 500
+    //        row2=3000 => 1500
+    //        row3=500  => -1000 => clamp=0
+    ok = df.datetimeRebase(&df, 0, 1500LL);
+    assert(ok);
+
+    const Series* col = df.getSeries(&df, 0);
+    long long val=0;
+    seriesGetDateTime(col, 0, &val);
+    assert(val == 0LL);
+    seriesGetDateTime(col, 1, &val);
+    assert(val == 500LL);
+    seriesGetDateTime(col, 2, &val);
+    assert(val == 1500LL);
+    seriesGetDateTime(col, 3, &val);
+    assert(val == 0LL);
+
+    DataFrame_Destroy(&df);
+
+```
+
+# Date::bool datetimeClamp(const DataFrame* df, size_t colIndex, long long minMs, long long maxMs)
+![datetimeClamp](diagrams/datetimeClamp.png "datetimeClamp")
+
+| **Original `msVal`** | **`minMs`** | **`maxMs`** | **Computed `msVal`**                     | **Explanation**                                                                                               |
+|----------------------|------------:|------------:|-------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| **1,000**           |       2,000 |      10,000 | **2,000**                                 | - `1,000` < `minMs` => clamped up to `2,000`.                                                                 |
+| **5,000**           |       2,000 |      10,000 | **5,000**                                 | - Already within `[2,000..10,000]` => remains `5,000`.                                                        |
+| **15,000**          |       2,000 |      10,000 | **10,000**                                | - `15,000` > `maxMs` => clamped down to `10,000`.                                                             |
+| **1,999**           |       2,000 |      10,000 | **2,000**                                 | - Just below `minMs` => clamped up to `2,000`.                                                                |
+| **9,999**           |       2,000 |      10,000 | **9,999**                                 | - Falls within the range => unchanged.                                                                        |
+| **-500**            |       2,000 |      10,000 | **2,000**                                 | - Negative value => also clamped up to `2,000`.                                                               |
+
+
+## Usage:
+
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Create a DF_DATETIME col => 10, 50, 100, 9999
+    Series sdt;
+    seriesInit(&sdt, "ClampTest", DF_DATETIME);
+    long long vals[] = {10LL, 50LL, 100LL, 9999LL};
+    for (int i=0; i<4; i++) {
+        seriesAddDateTime(&sdt, vals[i]);
+    }
+    bool ok = df.addSeries(&df, &sdt);
+    seriesFree(&sdt);
+    assert(ok);
+
+    // clamp => min=20, max=9000
+    // => 10 => 20
+    // => 50 => 50
+    // => 100 => 100
+    // => 9999 => 9000
+    ok = df.datetimeClamp(&df, 0, 20LL, 9000LL);
+    assert(ok);
+
+    const Series* col = df.getSeries(&df, 0);
+    long long val=0;
+
+    seriesGetDateTime(col, 0, &val);
+    assert(val == 20LL);
+    seriesGetDateTime(col, 1, &val);
+    assert(val == 50LL);
+    seriesGetDateTime(col, 2, &val);
+    assert(val == 100LL);
+    seriesGetDateTime(col, 3, &val);
+    assert(val == 9000LL);
+
+    DataFrame_Destroy(&df);
+```
