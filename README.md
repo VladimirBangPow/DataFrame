@@ -1069,7 +1069,25 @@ Given a DataFrame `df` and a column index `colIndex`, the function returns the *
 - $\mu$	=	the population mean
 ## Usage:
 ```c
+    DataFrame df;
+    DataFrame_Create(&df);
 
+    // DF_DOUBLE => [1,2,3,4]
+    // sample standard deviation => sqrt(1.6666667) ~ 1.290994
+    Series s;
+    seriesInit(&s, "StdTest", DF_DOUBLE);
+    seriesAddDouble(&s, 1.0);
+    seriesAddDouble(&s, 2.0);
+    seriesAddDouble(&s, 3.0);
+    seriesAddDouble(&s, 4.0);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double stdev = df.std(&df, 0);
+    // Expect ~1.290994 (since sample var=1.6667)
+    assert(fabs(stdev - 1.290994) < 1e-5);
+
+    DataFrame_Destroy(&df);
 ```
 
 
