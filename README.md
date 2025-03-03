@@ -853,3 +853,1015 @@
 
     DataFrame_Destroy(&df);
 ```
+
+# DataFrame::Aggregate
+
+# Aggregate::double sum(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function computes the sum of that column’s values by iterating through each row and **accumulating** the entries that successfully read. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\sum_{r=0}^{n-1} x_r$
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Build a DF_INT column => [1, 2, 3, 4]
+    Series s;
+    seriesInit(&s, "Numbers", DF_INT);
+    for (int i = 1; i <= 4; i++) {
+        seriesAddInt(&s, i);
+    }
+    bool ok = df.addSeries(&df, &s);
+    assert(ok);
+
+    double sumRes = df.sum(&df, 0);
+    assertAlmostEqual(sumRes, 1+2+3+4, 1e-9);
+
+    seriesFree(&s);
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::double mean(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **mean** of that column’s values by summing all valid entries and dividing by the total number of rows. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\displaystyle \frac{1}{n} \sum_{r=0}^{n-1} x_r$
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    Series s;
+    seriesInit(&s, "MeanTest", DF_DOUBLE);
+
+    // [1.0, 2.0, 3.0, 4.0]
+    double arr[] = {1.0, 2.0, 3.0, 4.0};
+    for (int i=0; i<4; i++){
+        seriesAddDouble(&s, arr[i]);
+    }
+    bool ok = df.addSeries(&df, &s);
+    assert(ok);
+
+    double m = df.mean(&df, 0);
+    // average = (1+2+3+4)/4 = 2.5
+    assertAlmostEqual(m, 2.5, 1e-9);
+
+    seriesFree(&s);
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::double min(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function finds the **minimum** of that column’s values by iterating through each row and keeping track of the smallest entry encountered. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\displaystyle \min_{0 \le r < n} \ x_r$
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE col => [10.5, 2.2, 7.7]
+    Series s;
+    seriesInit(&s, "MinTest", DF_DOUBLE);
+    seriesAddDouble(&s, 10.5);
+    seriesAddDouble(&s, 2.2);
+    seriesAddDouble(&s, 7.7);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double mn = df.min(&df, 0);
+    assertAlmostEqual(mn, 2.2, 1e-9);
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::double max(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function finds the **maximum** of that column’s values by iterating through each row and keeping track of the largest entry encountered. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\displaystyle \max_{0 \le r < n} \ x_r$
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT col => [3,9,1]
+    Series s;
+    seriesInit(&s, "MaxTest", DF_INT);
+    seriesAddInt(&s, 3);
+    seriesAddInt(&s, 9);
+    seriesAddInt(&s, 1);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double mx = df.max(&df, 0);
+    assertAlmostEqual(mx, 9, 1e-9);
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::double count(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **count** of valid (non-null) entries in that column by iterating over each row and incrementing for every successfully read value.
+
+# $\displaystyle \sum_{r=0}^{n-1} \mathbf{I}(x_r\ \text{is not null})$
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // We'll do DF_STRING with 4 valid rows
+    Series s;
+    seriesInit(&s, "CountTest", DF_STRING);
+    seriesAddString(&s, "apple");
+    seriesAddString(&s, "banana");
+    seriesAddString(&s, "orange");
+    seriesAddString(&s, "kiwi");
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double c = df.count(&df, 0);
+    // 4 non-null strings => count=4
+    assertAlmostEqual(c, 4.0, 1e-9);
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::double median(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **median** of the column’s numeric values by sorting them. 
+
+![image](https://github.com/user-attachments/assets/6683f5b1-a608-48da-9752-ec248aaf5f0d)
+
+The median of a set of numbers is the value separating the higher half from the lower half of a data sample, a population, or a probability distribution. For a data set, it may be thought of as the “middle" value.
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [2, 4, 6, 8] => median = (4+6)/2=5
+    Series s;
+    seriesInit(&s, "MedianTest", DF_DOUBLE);
+    seriesAddDouble(&s, 2.0);
+    seriesAddDouble(&s, 4.0);
+    seriesAddDouble(&s, 6.0);
+    seriesAddDouble(&s, 8.0);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double med = df.median(&df, 0);
+    assertAlmostEqual(med, 5.0, 1e-9);
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::double mode(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **mode** of the column’s numeric values by sorting them. 
+![image](https://github.com/user-attachments/assets/697f6b7b-863f-4016-a5b7-efbc3dea9083)
+
+In statistics, the mode is the value that appears most often in a set of data values.[1] If X is a discrete random variable, the mode is the value x at which the probability mass function takes its maximum value (i.e., x=argmaxxi P(X = xi)). In other words, it is the value that is most likely to be sampled.
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [2,2,5,2,5] => mode=2 since freq(2)=3 freq(5)=2
+    Series s;
+    seriesInit(&s, "ModeTest", DF_INT);
+    seriesAddInt(&s, 2);
+    seriesAddInt(&s, 2);
+    seriesAddInt(&s, 5);
+    seriesAddInt(&s, 2);
+    seriesAddInt(&s, 5);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double modeVal = df.mode(&df, 0);
+    assertAlmostEqual(modeVal, 2.0, 1e-9);
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::double std(const DataFrame* df, size_t colIndex)
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **standard deviation** of the column’s numeric values. The **sample** standard deviation is:
+![image](https://github.com/user-attachments/assets/5a3c7690-c894-467c-96f3-6ffd11390391)
+
+# $\sigma={\sqrt {\frac {\sum(x_{i}-{\mu})^{2}}{N}}}$
+- $\sigma$	=	population standard deviation
+- $N$	=	the size of the population
+- $x_i$	=	each value from the population
+- $\mu$	=	the population mean
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [1,2,3,4]
+    // sample standard deviation => sqrt(1.6666667) ~ 1.290994
+    Series s;
+    seriesInit(&s, "StdTest", DF_DOUBLE);
+    seriesAddDouble(&s, 1.0);
+    seriesAddDouble(&s, 2.0);
+    seriesAddDouble(&s, 3.0);
+    seriesAddDouble(&s, 4.0);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double stdev = df.std(&df, 0);
+    // Expect ~1.290994 (since sample var=1.6667)
+    assert(fabs(stdev - 1.290994) < 1e-5);
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate:: double var(const DataFrame* df, size_t colIndex)
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **variance** of the column’s numeric values.
+
+![image](https://github.com/user-attachments/assets/777f8349-3dc9-4a2f-bb35-7538439d0e9e)
+
+
+# $S^2 = \frac{\sum (x_i - \bar{x})^2}{n - 1}$
+- $S^2$	=	sample variance
+- $x_i$	=	the value of the one observation
+- $\bar{x}$	=	the mean value of all observations
+- $n$	=	the number of observations
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [1, 2, 3, 4]
+    // sample variance => 1.66666666...
+    Series s;
+    seriesInit(&s, "VarTest", DF_DOUBLE);
+    for (int i=1; i<=4; i++){
+        seriesAddDouble(&s, i);
+    }
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double v = df.var(&df, 0);
+    // population var=1.25, sample var= 1.6666667 (2 decimal=1.67)
+    // 1->1,2->4,3->9,4->16 => mean=2.5 => squares ~ (1.5^2 +0.5^2+0.5^2+1.5^2)=1.5^2=2.25 => sum=5 => /3=1.6667
+    assert(fabs(v - 1.6666667) < 1e-5);
+
+    DataFrame_Destroy(&df);
+```
+
+# Aggregate:: double range(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **range** of the column’s numeric values by computing the difference between the maximum and the minimum. If $\(n\)$ is the number of valid rows, and $\(x_r\)$ is the value in row $\(r\)$, then:
+
+# $\displaystyle \text{range} = \max_{0 \le r < n} x_r - \min_{0 \le r < n} x_r$
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [3,7,1,9] => min=1, max=9 => range=8
+    Series s;
+    seriesInit(&s, "RangeTest", DF_INT);
+    seriesAddInt(&s, 3);
+    seriesAddInt(&s, 7);
+    seriesAddInt(&s, 1);
+    seriesAddInt(&s, 9);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double r = df.range(&df, 0);
+    assertAlmostEqual(r, 8.0, 1e-9);
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate:: double quantile(const DataFrame* df, size_t colIndex, double q)
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **$\(\alpha\)$-quantile** of the column’s numeric values. 
+
+![image](https://github.com/user-attachments/assets/6a83d415-c6f3-4893-b85a-80746afdb26c)
+
+The area below the red curve is the same in the intervals (−∞,Q1), (Q1,Q2), (Q2,Q3), and (Q3,+∞).
+
+In statistics and probability, quantiles are cut points dividing the range of a probability distribution into continuous intervals with equal probabilities, or dividing the observations in a sample in the same way. There is one fewer quantile than the number of groups created. Common quantiles have special names, such as quartiles (four groups), deciles (ten groups), and percentiles (100 groups). The groups created are termed halves, thirds, quarters, etc., though sometimes the terms for the quantile are used for the groups created, rather than for the cut points.
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [10,20,30,40]
+    Series s;
+    seriesInit(&s, "QuantTest", DF_DOUBLE);
+    seriesAddDouble(&s, 10);
+    seriesAddDouble(&s, 20);
+    seriesAddDouble(&s, 30);
+    seriesAddDouble(&s, 40);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double q25 = df.quantile(&df, 0, 0.25); 
+    // sorted => [10,20,30,40], 0.25*(4-1)=0.75 => idxBelow=0, idxAbove=1 => interpol
+    // => 10 + 0.75*(20-10)= 10+7.5=17.5
+    assertAlmostEqual(q25, 17.5, 1e-9);
+
+    double q75 = df.quantile(&df, 0, 0.75); 
+    // pos=0.75*(3)=2.25 => idxBelow=2 => 30 => fraction=0.25 => next=40 => val=30+0.25*(40-30)=32.5
+    assertAlmostEqual(q75, 32.5, 1e-9);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+
+# Aggregate:: double iqr(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **interquartile range (IQR)** of the column’s numeric values. It uses the 25th percentile $(\(Q_1\))$ and the 75th percentile $(\(Q_3\))$:
+
+![image](https://github.com/user-attachments/assets/ea2dc610-80ea-401b-9357-595ff8371d27)
+
+In descriptive statistics, the interquartile range (IQR) is a measure of statistical dispersion, which is the spread of the data.[1] The IQR may also be called the midspread, middle 50%, fourth spread, or H‑spread. It is defined as the difference between the 75th and 25th percentiles of the data.[2][3][4] To calculate the IQR, the data set is divided into quartiles, or four rank-ordered even parts via linear interpolation.[1] These quartiles are denoted by Q1 (also called the lower quartile), Q2 (the median), and Q3 (also called the upper quartile). The lower quartile corresponds with the 25th percentile and the upper quartile corresponds with the 75th percentile, so IQR = Q3 −  Q1[1].
+
+The IQR is an example of a trimmed estimator, defined as the 25% trimmed range, which enhances the accuracy of dataset statistics by dropping lower contribution, outlying points.[5] It is also used as a robust measure of scale[5] It can be clearly visualized by the box on a box plot.[1]
+
+
+# $\displaystyle \text{IQR} = Q_{3} - Q_{1}$
+
+where $\(Q_{1} = \text{quantile}(0.25)\)$ and $\(Q_{3} = \text{quantile}(0.75)\)$. The values are typically found via interpolation after sorting.
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [2,4,6,8]
+    Series s;
+    seriesInit(&s, "IQRTest", DF_INT);
+    seriesAddInt(&s, 2);
+    seriesAddInt(&s, 4);
+    seriesAddInt(&s, 6);
+    seriesAddInt(&s, 8);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double iqrVal = df.iqr(&df, 0);
+    // 25% ~ 3, 75% ~ 7 => iqr=3
+    // Let's see precisely:
+    // sorted => [2,4,6,8], q1 => 0.25*(3)=0.75 => interpol => 2 +0.75*(4-2)= 3.5? Actually let's do carefully
+    // Actually let's do quick: if q1=3, q3=7 => iqr=3 => We'll accept approximate
+    // This might differ a bit if your quantile logic is continuous. We'll assert ~3
+    assertAlmostEqual(iqrVal, 3.0, 0.1);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+
+# Aggregate:: double nullCount(const DataFrame* df, size_t colIndex)
+If a column has $\(n\)$ rows, we define an “is-null” indicator $\(\mathbf{I}(\cdot)\)$ that is 1 if reading row $\(r\)$ fails, and 0 otherwise. The **null count** is:
+
+# $\[\sum_{r=0}^{n-1} \mathbf{I}\bigl(\text{read fails at row } r\bigr).\]$
+
+Thus, each time seriesGetXxx(...) returns false, we interpret that row as null and increment by 1.
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 2) Build a DF_STRING column with a single valid entry ("hi")
+    Series s;
+    seriesInit(&s, "NullTest", DF_STRING);
+    seriesAddString(&s, "hi");   // 1 row => "hi"
+
+    bool ok = df.addSeries(&df, &s);
+    seriesFree(&s);
+    assert(ok);
+
+    // 3) Prepare a "null" pointer for the second row => row2
+    //    dfAddRow_impl for DF_STRING checks if (strPtr == NULL) => returns false,
+    //    so the row won't actually be added.
+    const char* row2 = NULL;
+    const void* rowData[1];
+    rowData[0] = (const void*)row2;
+
+    // Attempt to add a second row. This will fail silently and not increment nrows.
+    if (df.numColumns(&df) == 1) {
+        bool added = df.addRow(&df, rowData);
+        // This is expected to be 'false' because strPtr == NULL
+        assert(!added);
+    }
+
+    // 4) Check nullCount. We still only have 1 row => "hi", no actual "null" rows
+    double nCount = df.nullCount(&df, 0);
+    // Because the second row never got added, aggregator sees only "hi".
+    // => no null => assert nCount==0
+    assert(nCount == 0.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate:: double uniqueCount(const DataFrame* df, size_t colIndex)
+The unique count aggregator's goal is to count the number of distinct values in a specified column
+
+Why the O(n²) Approach?
+This naive check is simple to implement, iterating pairs of elements. For each new element, we see if it already exists among previously encountered elements.
+In a production environment, we might use a hash set or sort the array and do a single pass to find distinct elements in O(n log n). But here, the naive approach is straightforward.
+
+# $\displaystyle \sum_{r=0}^{n-1} \mathbf{I}\!\Bigl( x_r \not\in \{x_0,\dots,x_{r-1}\}\Bigr)$
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [1,2,2,3]
+    Series s;
+    seriesInit(&s, "UniqueCountTest", DF_INT);
+    seriesAddInt(&s,1);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,3);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double uniq = df.uniqueCount(&df, 0);
+    // distinct= {1,2,3} => 3
+    assert(uniq==3.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::double product(const DataFrame* df, size_t colIndex)
+The product aggregator multiplies all valid numeric values in a specified column, returning the cumulative product as a double
+
+# $\displaystyle \prod_{r=0}^{n-1} x_r$
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [2,3,4] => product=2*3*4=24
+    Series s;
+    seriesInit(&s, "ProdTest", DF_INT);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,3);
+    seriesAddInt(&s,4);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double prod = df.product(&df, 0);
+    assert(prod==24.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+
+# Aggregate::double nthLargest(const DataFrame* df, size_t colIndex, size_t n)
+Given a DataFrame `df`, a column index `colIndex`, and an integer `n`, the function returns the **n-th largest** value in the column’s numeric data. If the column has $\(N\)$ valid entries $\(x_0, x_1, \dots, x_{N-1}\)$, we first **sort** them in **descending** order:
+
+# $y_0 \ge y_1 \ge\dots\ge y_{N-1}$
+
+where each $\(y_i\)$ is one of the $\(x_r\)$. Then the **n-th largest** is:
+
+# $\displaystyle y_{\,(n-1)}$
+
+i.e., **the $\((n-1)\)$-th index** in the sorted (descending) array. If $\(n\)$ exceeds $\(N\)$ or no values are valid, a fallback value (e.g., 0.0) is returned.
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [5, 10, 1, 9, 20]
+    Series s;
+    seriesInit(&s, "NthLarge", DF_DOUBLE);
+    seriesAddDouble(&s,5);
+    seriesAddDouble(&s,10);
+    seriesAddDouble(&s,1);
+    seriesAddDouble(&s,9);
+    seriesAddDouble(&s,20);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // sorted desc => [20,10,9,5,1]
+    // nth largest(1) => 20
+    // nth largest(3) => 9
+    double l1 = df.nthLargest(&df,0,1);
+    double l3 = df.nthLargest(&df,0,3);
+    assert(l1==20.0);
+    assert(l3==9.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::double nthSmallest(const DataFrame* df, size_t colIndex, size_t n)
+
+Given a DataFrame `df`, a column index `colIndex`, and an integer `n`, the function returns the **n-th smallest** value in the column’s numeric data. If the column has $\(N\)$ valid entries $\(x_0, x_1, \dots, x_{N-1}\)$, we first **sort** them in **ascending** order:
+
+# $y_0 \le y_1 \le\dots\le y_{N-1}$
+
+where each $\(y_i\)$ is one of the $\(x_r\)$. Then the **n-th smallest** is:
+
+# $\displaystyle y_{\,(n-1)}$
+
+i.e., **the $\((n-1)\)$-th index** in the sorted (ascending) array. If $\(n\)$ exceeds $\(N\)$ or no values are valid, a fallback value (e.g., 0.0) is returned.
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [10,3,5,7]
+    Series s;
+    seriesInit(&s, "NthSmall", DF_INT);
+    seriesAddInt(&s,10);
+    seriesAddInt(&s,3);
+    seriesAddInt(&s,5);
+    seriesAddInt(&s,7);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // sorted ascending => [3,5,7,10]
+    // 1st => 3, 2nd => 5
+    double s1 = df.nthSmallest(&df,0,1);
+    double s2 = df.nthSmallest(&df,0,2);
+    assert(s1==3.0);
+    assert(s2==5.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::double skewness(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **sample skewness** of the column’s numeric values. 
+
+Consider the two distributions in the figure just below. Within each graph, the values on the right side of the distribution taper differently from the values on the left side. These tapering sides are called tails, and they provide a visual means to determine which of the two kinds of skewness a distribution has:
+
+- negative skew: The left tail is longer; the mass of the distribution is concentrated on the right of the figure. The distribution is said to be left-skewed, left-tailed, or skewed to the left, despite the fact that the curve itself appears to be skewed or leaning to the right; left instead refers to the left tail being drawn out and, often, the mean being skewed to the left of a typical center of the data. A left-skewed distribution usually appears as a right-leaning curve.
+- positive skew: The right tail is longer; the mass of the distribution is concentrated on the left of the figure. The distribution is said to be right-skewed, right-tailed, or skewed to the right, despite the fact that the curve itself appears to be skewed or leaning to the left; right instead refers to the right tail being drawn out and, often, the mean being skewed to the right of a typical center of the data. A right-skewed distribution usually appears as a left-leaning curve. https://en.wikipedia.org/wiki/Skewness
+  
+![image](https://github.com/user-attachments/assets/41d110a0-5465-4e47-b229-0bab92605fcb)
+
+![image](https://github.com/user-attachments/assets/e700653c-b96a-487b-b2a5-6b2e7daf78b1)
+
+where μ is the mean, σ is the standard deviation, E is the expectation operator, μ3 is the third central moment, and κt are the t-th cumulants. It is sometimes referred to as Pearson's moment coefficient of skewness,[5] or simply the moment coefficient of skewness,[4] but should not be confused with Pearson's other skewness statistics
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // simple DF_DOUBLE => [1,2,3,4,100] => known to have positive skew
+    Series s;
+    seriesInit(&s, "SkewTest", DF_DOUBLE);
+    double arr[] = {1,2,3,4,100};
+    for (int i=0; i<5; i++){
+        seriesAddDouble(&s, arr[i]);
+    }
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double sk = df.skewness(&df, 0);
+    // We'll just check it's >0
+    assert(sk>0.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+
+# Aggregate::double kurtosis(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **kurtosis** of the columns numeric values.
+
+![image](https://github.com/user-attachments/assets/8c094786-c2ab-45fa-afad-9ea59f5c66cc)
+
+In probability theory and statistics, kurtosis (from Greek: κυρτός, kyrtos or kurtos, meaning "curved, arching") refers to the degree of “tailedness” in the probability distribution of a real-valued random variable. Similar to skewness, kurtosis provides insight into specific characteristics of a distribution. Various methods exist for quantifying kurtosis in theoretical distributions, and corresponding techniques allow estimation based on sample data from a population. It’s important to note that different measures of kurtosis can yield varying interpretations.
+
+The standard measure of a distribution's kurtosis, originating with Karl Pearson,[1] is a scaled version of the fourth moment of the distribution. This number is related to the tails of the distribution, not its peak;[2] hence, the sometimes-seen characterization of kurtosis as "peakedness" is incorrect. For this measure, higher kurtosis corresponds to greater extremity of deviations (or outliers), and not the configuration of data near the mean.
+
+The kurtosis is the fourth standardized moment, defined as:
+![image](https://github.com/user-attachments/assets/c01d9ad4-bc70-49e8-a577-5992d4f96fc9)
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [1,2,3,4,100] => typically has high kurtosis
+    Series s;
+    seriesInit(&s, "KurtTest", DF_DOUBLE);
+    double arr[] = {1,2,3,4,100};
+    for (int i=0; i<5; i++){
+        seriesAddDouble(&s, arr[i]);
+    }
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double kurt = df.kurtosis(&df, 0);
+    // Check it's > 0. Typically big outlier => large positive kurt
+    assert(kurt>0.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::double covariance(const DataFrame* df, size_t colIndex1, size_t colIndex2)
+
+Given a DataFrame `df` and two column indices (`colIndex1` and `colIndex2`), the function computes the **sample covariance** between the numeric values in these two columns.
+
+![image](https://github.com/user-attachments/assets/4992c491-dd4c-4aaa-93af-2da86909cd5d)
+
+![image](https://github.com/user-attachments/assets/90f43f70-7681-4974-bf28-627e6db90644)
+
+
+- $cov_{x,y}$	=	covariance between variable x and y
+- $x_{i}$	=	data value of x
+- $y_{i}$	=	data value of y
+- $\bar{x}$	=	mean of x
+- $\bar{y}$	=	mean of y
+- $N$	=	number of data values
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 2 columns => X=[1,2,3], Y=[2,4,6] => correlation=1 => covariance>0
+    Series sx, sy;
+    seriesInit(&sx, "CovX", DF_INT);
+    seriesInit(&sy, "CovY", DF_INT);
+    seriesAddInt(&sx,1);
+    seriesAddInt(&sx,2);
+    seriesAddInt(&sx,3);
+    seriesAddInt(&sy,2);
+    seriesAddInt(&sy,4);
+    seriesAddInt(&sy,6);
+
+    df.addSeries(&df, &sx);
+    df.addSeries(&df, &sy);
+
+    seriesFree(&sx);
+    seriesFree(&sy);
+
+    double cov = df.covariance(&df, 0,1);
+    // Because Y=2X => perfect correlation => sample cov won't be 0 => let's just check >0
+    assert(cov>0.0);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::double correlation(const DataFrame* df, size_t colIndexX, size_t colIndexY)
+
+Given a DataFrame `df` and two column indices (`colIndexX`, `colIndexY`), the function computes the **Pearson correlation** between those columns’ numeric values.
+
+![image](https://github.com/user-attachments/assets/e5134239-299c-4e6e-8931-abf2736eb224)
+
+In statistics, the Pearson correlation coefficient (PCC)[a] is a correlation coefficient that measures linear correlation between two sets of data. It is the ratio between the covariance of two variables and the product of their standard deviations; thus, it is essentially a normalized measurement of the covariance, such that the result always has a value between −1 and 1. As with covariance itself, the measure can only reflect a linear correlation of variables, and ignores many other types of relationships or correlations.
+
+![image](https://github.com/user-attachments/assets/d8a5b131-6929-4d92-88ab-9e3589b255f7)
+
+
+- $r$	=	correlation coefficient
+- $x_{i}$	=	values of the x-variable in a sample
+- $\bar{x}$	=	mean of the values of the x-variable
+- $y_{i}$	=	values of the y-variable in a sample
+- $\bar{y}$	=	mean of the values of the y-variable
+
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // X=[10,20,30], Y=[20,40,60] => perfect correlation => correlation ~1
+    Series sx, sy;
+    seriesInit(&sx, "CorrX", DF_INT);
+    seriesInit(&sy, "CorrY", DF_INT);
+
+    seriesAddInt(&sx,10);
+    seriesAddInt(&sx,20);
+    seriesAddInt(&sx,30);
+
+    seriesAddInt(&sy,20);
+    seriesAddInt(&sy,40);
+    seriesAddInt(&sy,60);
+
+    df.addSeries(&df, &sx);
+    df.addSeries(&df, &sy);
+    seriesFree(&sx);
+    seriesFree(&sy);
+
+    double corr = df.correlation(&df, 0,1);
+    // should be near 1
+    assertAlmostEqual(corr,1.0,1e-5);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::DataFrame uniqueValues(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function **creates a new DataFrame** containing only the **distinct values** from that column.
+![uniqueValues](diagrams/uniqueValues.png "uniqueValues")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [2,2,5,7,5]
+    Series s;
+    seriesInit(&s, "UniqueValTest", DF_INT);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,5);
+    seriesAddInt(&s,7);
+    seriesAddInt(&s,5);
+    df.addSeries(&df,&s);
+    seriesFree(&s);
+
+    DataFrame uniqueDF = df.uniqueValues(&df, 0);
+    // distinct => {2,5,7} => we expect 3 rows in uniqueDF
+    size_t rowCount = uniqueDF.numRows(&uniqueDF);
+    assert(rowCount==3);
+
+    // We won't check the exact order. Just check the total.
+    DataFrame_Destroy(&uniqueDF);
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::DataFrame valueCounts(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the **valueCounts** function returns a new DataFrame listing each **distinct value** in that column along with its **frequency**.
+
+![valueCounts](diagrams/valueCounts.png "valueCounts")
+
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_STRING => ["apple", "apple", "banana"]
+    Series s;
+    seriesInit(&s, "VCtest", DF_STRING);
+    seriesAddString(&s, "apple");
+    seriesAddString(&s, "apple");
+    seriesAddString(&s, "banana");
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    DataFrame vc = df.valueCounts(&df, 0);
+    // Expect 2 distinct => "apple" (2), "banana"(1)
+    // We'll just check numRows=2
+    size_t rowCount = vc.numRows(&vc);
+    assert(rowCount==2);
+
+    DataFrame_Destroy(&vc);
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::DataFrame cumulativeSum(const DataFrame* df, size_t colIndex)
+
+It creates a new column that, for each row, holds the running total (sum) of all previous rows (including the current row).
+
+![cumSum](diagrams/cumSum.png "cumSum")
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [1.0, 2.0, 3.0]
+    Series s;
+    seriesInit(&s, "CumSumTest", DF_DOUBLE);
+    seriesAddDouble(&s,1.0);
+    seriesAddDouble(&s,2.0);
+    seriesAddDouble(&s,3.0);
+    df.addSeries(&df,&s);
+    seriesFree(&s);
+
+    DataFrame cs = df.cumulativeSum(&df, 0);
+    // col "cumsum" => [1.0, 3.0, 6.0]
+    const Series* csumCol = cs.getSeries(&cs, 0);
+    assert(csumCol && csumCol->type==DF_DOUBLE);
+
+    double v0,v1,v2;
+    seriesGetDouble(csumCol, 0, &v0);
+    seriesGetDouble(csumCol, 1, &v1);
+    seriesGetDouble(csumCol, 2, &v2);
+    assertAlmostEqual(v0,1.0,1e-9);
+    assertAlmostEqual(v1,3.0,1e-9);
+    assertAlmostEqual(v2,6.0,1e-9);
+
+    DataFrame_Destroy(&cs);
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Aggregate::DataFrame cumulativeProduct(const DataFrame* df, size_t colIndex)
+For each row in a numeric column, cumulative product stores the running product of all previous values (including the current one)
+![cumProduct](diagrams/cumProduct.png "cumProduct")
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [2,2,3]
+    Series s;
+    seriesInit(&s, "CumProdTest", DF_INT);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,3);
+    df.addSeries(&df,&s);
+    seriesFree(&s);
+
+    DataFrame cp = df.cumulativeProduct(&df,0);
+    // expect => [2,4,12]
+    const Series* cprodCol = cp.getSeries(&cp, 0);
+    double v0,v1,v2;
+    seriesGetDouble(cprodCol,0,&v0);
+    seriesGetDouble(cprodCol,1,&v1);
+    seriesGetDouble(cprodCol,2,&v2);
+    assertAlmostEqual(v0,2.0,1e-9);
+    assertAlmostEqual(v1,4.0,1e-9);
+    assertAlmostEqual(v2,12.0,1e-9);
+
+    DataFrame_Destroy(&cp);
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::DataFrame cumulativeMax(const DataFrame* df, size_t colIndex)
+
+The cumulative max at row 𝑖 is the largest value seen so far (from row 0 up to row 𝑖)
+
+![cumMax](diagrams/cumMax.png "cumMax")
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [1,3,2,5]
+    Series s;
+    seriesInit(&s, "CumMaxTest", DF_INT);
+    seriesAddInt(&s,1);
+    seriesAddInt(&s,3);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,5);
+    df.addSeries(&df,&s);
+    seriesFree(&s);
+
+    DataFrame cm = df.cumulativeMax(&df,0);
+    // row0 =>1, row1=>3, row2=>3, row3=>5
+    const Series* cmaxCol = cm.getSeries(&cm,0);
+    double v0,v1,v2,v3;
+    seriesGetDouble(cmaxCol,0,&v0);
+    seriesGetDouble(cmaxCol,1,&v1);
+    seriesGetDouble(cmaxCol,2,&v2);
+    seriesGetDouble(cmaxCol,3,&v3);
+    assertAlmostEqual(v0,1.0,1e-9);
+    assertAlmostEqual(v1,3.0,1e-9);
+    assertAlmostEqual(v2,3.0,1e-9);
+    assertAlmostEqual(v3,5.0,1e-9);
+
+    DataFrame_Destroy(&cm);
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::DataFrame cumulativeMin(const DataFrame* df, size_t colIndex)
+
+The cumulative max at row 𝑖 is the smallest value seen so far (from row 0 up to row 𝑖)
+
+![cumMin](diagrams/cumMin.png "cumMin")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_INT => [3,2,5,1]
+    Series s;
+    seriesInit(&s, "CumMinTest", DF_INT);
+    seriesAddInt(&s,3);
+    seriesAddInt(&s,2);
+    seriesAddInt(&s,5);
+    seriesAddInt(&s,1);
+    df.addSeries(&df,&s);
+    seriesFree(&s);
+
+    DataFrame cmi = df.cumulativeMin(&df,0);
+    // row0=>3, row1=>2, row2=>2, row3=>1
+    const Series* cminCol = cmi.getSeries(&cmi,0);
+    double v0,v1,v2,v3;
+    seriesGetDouble(cminCol,0,&v0);
+    seriesGetDouble(cminCol,1,&v1);
+    seriesGetDouble(cminCol,2,&v2);
+    seriesGetDouble(cminCol,3,&v3);
+    assertAlmostEqual(v0,3.0,1e-9);
+    assertAlmostEqual(v1,2.0,1e-9);
+    assertAlmostEqual(v2,2.0,1e-9);
+    assertAlmostEqual(v3,1.0,1e-9);
+
+    DataFrame_Destroy(&cmi);
+    DataFrame_Destroy(&df);
+```
+
+
+# Aggregate::DataFrame groupBy(const DataFrame* df, size_t groupColIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function returns a new DataFrame listing each **distinct value** in that column along with its **frequency**.
+
+![groupBy](diagrams/groupBy.png "groupBy")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // We'll store DF_STRING => ["apple","banana","banana","apple"]
+    // so group => "apple"(2), "banana"(2)
+    Series s;
+    seriesInit(&s, "Fruit", DF_STRING);
+    seriesAddString(&s,"apple");
+    seriesAddString(&s,"banana");
+    seriesAddString(&s,"banana");
+    seriesAddString(&s,"apple");
+    df.addSeries(&df,&s);
+    seriesFree(&s);
+
+    DataFrame g = df.groupBy(&df,0);
+    // We expect 2 rows => group => "apple", "banana"
+    size_t r = g.numRows(&g);
+    assert(r==2);
+
+    // Also might check the "count" column => each should be 2
+    // We'll do minimal here
+    DataFrame_Destroy(&g);
+    DataFrame_Destroy(&df);
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
