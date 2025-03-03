@@ -265,13 +265,6 @@ static void testJoinBasic(void)
         assert(joined.numColumns(&joined)==3);
         assert(joined.numRows(&joined)==4);
 
-        // We'll check them in order: 
-        //   typically the matched rows appear in the same order as left => so we get Key=1,2,3,4 in final
-        // row0 => Key=1 => A=100 => C="NA"  (unmatched)
-        // row1 => Key=2 => A=200 => C="two" (matched)
-        // row2 => Key=3 => A=300 => C="NA"  (unmatched)
-        // row3 => Key=4 => A=400 => C="four" (matched)
-
         const Series* k = joined.getSeries(&joined,0);
         const Series* a = joined.getSeries(&joined,1);
         const Series* c = joined.getSeries(&joined,2);
@@ -327,24 +320,15 @@ static void testJoinBasic(void)
         // matched => Key=2,4 => 2 rows
         // unmatched => Key2=5 => 1 row => total 3 rows
         // columns => [Key,A,C]
-        // But we have to store "NA" for left columns if not matched. 
-        // The matched rows appear in order of right? Actually depends on your implementation. 
-        // We'll guess => Key2=2 => Key=2 => row0, Key2=4=>Key=4 => row1, Key2=5 => Key= "NA" => row2
-        // But you might put them in the order left->right or the opposite. We'll check carefully.
-
         assert(joined.numColumns(&joined)==3);
-        // we expect 3 rows
         assert(joined.numRows(&joined)==3);
 
         const Series* k = joined.getSeries(&joined, 0);
         const Series* a = joined.getSeries(&joined, 1);
         const Series* c = joined.getSeries(&joined, 2);
 
-        // Typically row0 => key=2 => A=200 => C="two"
-        // row1 => key=4 => A=400 => C="four"
-        // row2 => key=NA => A=NA => C="five" (unmatched right row)
+        // row0 => key=2 => a=200 => c="two"
         {
-            // row0 => key=2 => a=200 => c="two"
             int kv; bool g= seriesGetInt(k,0,&kv);
             assert(g && kv==2);
             int av; g= seriesGetInt(a,0,&av);
@@ -353,8 +337,8 @@ static void testJoinBasic(void)
             assert(g && strcmp(st,"two")==0);
             free(st);
         }
+        // row1 => key=4 => a=400 => c="four"
         {
-            // row1 => key=4 => a=400 => c="four"
             int kv; bool g= seriesGetInt(k,1,&kv);
             assert(g && kv==4);
             int av; g= seriesGetInt(a,1,&av);
@@ -363,13 +347,10 @@ static void testJoinBasic(void)
             assert(g && strcmp(st,"four")==0);
             free(st);
         }
+        // row2 => Key=0 => A=0 => c="five" 
         {
-            // row2 => key=0 => a=0 => c="five"
-            // or if your code sets the string to "NA" for key col
-            // we used "NA" for strings, 0 for ints => let's see:
             int kv; bool g= seriesGetInt(k,2,&kv);
-            // it's "NA" in a string column => but key is int => we do 0 => so kv=0
-            assert(g && kv==0);
+            assert(g && kv==0);  // we store int "NA" as 0
             int av; g= seriesGetInt(a,2,&av);
             assert(g && av==0);
             char* st=NULL; g= seriesGetString(c,2,&st);
@@ -386,16 +367,271 @@ static void testJoinBasic(void)
     printf(" - dfJoin_impl tests (INNER,LEFT,RIGHT) passed.\n");
 }
 
+
+static void testUnion(void)
+{
+    printf("Testing dfUnion_impl...\n");
+
+    // We'll create 2 DataFrames with 1 column => "Val" (int).
+    // dfA => [1,2,2], dfB => [2,3]
+    // Union => distinct => [1,2,3]
+    DataFrame dfA;
+    DataFrame_Create(&dfA);
+    int arrA[] = {1,2,2};
+    Series sA = buildIntSeries("Val", arrA, 3);
+    dfA.addSeries(&dfA, &sA);
+    seriesFree(&sA);
+
+    DataFrame dfB;
+    DataFrame_Create(&dfB);
+    int arrB[] = {2,3};
+    Series sB = buildIntSeries("Val", arrB, 2);
+    dfB.addSeries(&dfB, &sB);
+    seriesFree(&sB);
+
+    // union => [1,2,3]
+    DataFrame un = dfA.unionDF(&dfA, &dfB);
+    // expect 1 col, 3 rows => distinct => 1,2,3
+    assert(un.numColumns(&un)==1);
+    assert(un.numRows(&un)==3);
+
+    // check that the set is {1,2,3}
+    // we won't check order strictly, but let's read them:
+    bool found1=false, found2=false, found3=false;
+    const Series* sU = un.getSeries(&un,0);
+    size_t nr = un.numRows(&un);
+    for (size_t r=0; r< nr; r++){
+        int v; seriesGetInt(sU, r, &v);
+        if (v==1) found1=true;
+        if (v==2) found2=true;
+        if (v==3) found3=true;
+    }
+    assert(found1 && found2 && found3);
+
+    DataFrame_Destroy(&un);
+    DataFrame_Destroy(&dfA);
+    DataFrame_Destroy(&dfB);
+
+    printf(" - dfUnion_impl test passed.\n");
+}
+
+static void testIntersection(void)
+{
+    printf("Testing dfIntersection_impl...\n");
+
+    // dfA => [2,2,3,4]
+    // dfB => [2,4,4,5]
+    // intersection => {2,4} (unique rows wise)
+    DataFrame dfA;
+    DataFrame_Create(&dfA);
+    int arrA[] = {2,2,3,4};
+    Series sA = buildIntSeries("Num", arrA, 4);
+    dfA.addSeries(&dfA, &sA);
+    seriesFree(&sA);
+
+    DataFrame dfB;
+    DataFrame_Create(&dfB);
+    int arrB[] = {2,4,4,5};
+    Series sB = buildIntSeries("Num", arrB, 4);
+    dfB.addSeries(&dfB, &sB);
+    seriesFree(&sB);
+
+    DataFrame inter = dfA.intersectionDF(&dfA, &dfB);
+    // expect {2,4} => 2 distinct rows
+    assert(inter.numColumns(&inter)==1);
+    size_t nr= inter.numRows(&inter);
+    // might have duplicates if implemented literally. If you do a "drop duplicates" approach, expect 2. 
+    // We'll assume your code does set-like intersection => 2 unique rows.
+
+    assert(nr==2);
+
+    const Series* sI = inter.getSeries(&inter,0);
+    bool found2=false, found4=false;
+    for (size_t r=0; r< nr; r++){
+        int v=0;
+        seriesGetInt(sI, r, &v);
+        if (v==2) found2=true;
+        if (v==4) found4=true;
+    }
+    assert(found2 && found4);
+
+    DataFrame_Destroy(&inter);
+    DataFrame_Destroy(&dfA);
+    DataFrame_Destroy(&dfB);
+
+    printf(" - dfIntersection_impl test passed.\n");
+}
+
+static void testDifference(void)
+{
+    printf("Testing dfDifference_impl...\n");
+
+    // dfA => [1,2,3]
+    // dfB => [2,4]
+    // difference => {1,3}  ( i.e. A\B )
+    DataFrame dfA;
+    DataFrame_Create(&dfA);
+    int arrA[] = {1,2,3};
+    Series sA = buildIntSeries("Val", arrA, 3);
+    dfA.addSeries(&dfA, &sA);
+    seriesFree(&sA);
+
+    DataFrame dfB;
+    DataFrame_Create(&dfB);
+    int arrB[] = {2,4};
+    Series sB = buildIntSeries("Val", arrB, 2);
+    dfB.addSeries(&dfB, &sB);
+    seriesFree(&sB);
+
+    DataFrame diff = dfA.differenceDF(&dfA, &dfB);
+    // expect [1,3]
+    assert(diff.numColumns(&diff)==1);
+    size_t nr= diff.numRows(&diff);
+    // might be 2 rows => val=1, val=3
+    assert(nr==2);
+
+    const Series* sD = diff.getSeries(&diff,0);
+    bool found1=false, found3=false;
+    for (size_t r=0; r<nr; r++){
+        int v=0;
+        seriesGetInt(sD, r, &v);
+        if (v==1) found1=true;
+        if (v==3) found3=true;
+    }
+    assert(found1 && found3);
+
+    DataFrame_Destroy(&diff);
+    DataFrame_Destroy(&dfA);
+    DataFrame_Destroy(&dfB);
+
+    printf(" - dfDifference_impl test passed.\n");
+}
+
+static void testSemiJoin(void)
+{
+    printf("Testing dfSemiJoin_impl...\n");
+    // left => Key=[1,2,3], left => colX=[10,20,30]
+    // right => Key2=[2,4], colY= "two","four"
+    // semiJoin(leftKey="Key", rightKey="Key2") => keep left rows that match
+    // => matches only Key=2 => row => Key=2 => colX=20
+    DataFrame left;
+    DataFrame_Create(&left);
+
+    int keyA[] = {1,2,3};
+    int colX[] = {10,20,30};
+    Series sKeyA = buildIntSeries("Key", keyA, 3);
+    left.addSeries(&left, &sKeyA);
+    seriesFree(&sKeyA);
+    Series sXA = buildIntSeries("X", colX, 3);
+    left.addSeries(&left, &sXA);
+    seriesFree(&sXA);
+
+    DataFrame right;
+    DataFrame_Create(&right);
+
+    int keyB[] = {2,4};
+    const char* colY[] = {"two","four"};
+    Series sKeyB = buildIntSeries("Key2", keyB, 2);
+    right.addSeries(&right, &sKeyB);
+    seriesFree(&sKeyB);
+    Series sYB = buildStringSeries("Y", colY, 2);
+    right.addSeries(&right, &sYB);
+    seriesFree(&sYB);
+
+    // semiJoin => left->semiJoin(leftKey="Key", rightKey="Key2")
+    DataFrame semi = left.semiJoin(&left, &right, "Key","Key2");
+    // expect 1 row => Key=2, X=20
+    assert(semi.numColumns(&semi)==2);
+    assert(semi.numRows(&semi)==1);
+
+    const Series* k = semi.getSeries(&semi,0);
+    const Series* x = semi.getSeries(&semi,1);
+
+    int kv=0; seriesGetInt(k,0,&kv);
+    assert(kv==2);
+    int xv=0; seriesGetInt(x,0,&xv);
+    assert(xv==20);
+
+    DataFrame_Destroy(&semi);
+    DataFrame_Destroy(&right);
+    DataFrame_Destroy(&left);
+
+    printf(" - dfSemiJoin_impl test passed.\n");
+}
+
+static void testAntiJoin(void)
+{
+    printf("Testing dfAntiJoin_impl...\n");
+    // left => Key=[1,2,3], colX=[10,20,30]
+    // right => Key2=[2,4], colY= ...
+    // antiJoin => keep left rows that DO NOT match => Key=1,3 => 2 rows
+    DataFrame left;
+    DataFrame_Create(&left);
+
+    int keyA[] = {1,2,3};
+    int colX[] = {10,20,30};
+    Series sKeyA = buildIntSeries("Key", keyA, 3);
+    left.addSeries(&left, &sKeyA);
+    seriesFree(&sKeyA);
+    Series sXA = buildIntSeries("X", colX, 3);
+    left.addSeries(&left, &sXA);
+    seriesFree(&sXA);
+
+    DataFrame right;
+    DataFrame_Create(&right);
+    int keyB[] = {2,4};
+    Series sKeyB = buildIntSeries("Key2", keyB, 2);
+    right.addSeries(&right, &sKeyB);
+    seriesFree(&sKeyB);
+
+    // do the antiJoin
+    DataFrame anti = left.antiJoin(&left, &right, "Key","Key2");
+    // expected => 2 rows => Key=1 => colX=10, Key=3 => colX=30
+    assert(anti.numColumns(&anti)==2);
+    assert(anti.numRows(&anti)==2);
+
+    const Series* k = anti.getSeries(&anti,0);
+    const Series* x = anti.getSeries(&anti,1);
+
+    // row0 => Key=1 => X=10
+    {
+        int kv; bool g= seriesGetInt(k,0,&kv);
+        assert(g && kv==1);
+        int xv; g= seriesGetInt(x,0,&xv);
+        assert(g && xv==10);
+    }
+    // row1 => Key=3 => X=30
+    {
+        int kv; bool g= seriesGetInt(k,1,&kv);
+        assert(g && kv==3);
+        int xv; g= seriesGetInt(x,1,&xv);
+        assert(g && xv==30);
+    }
+
+    DataFrame_Destroy(&anti);
+    DataFrame_Destroy(&right);
+    DataFrame_Destroy(&left);
+
+    printf(" - dfAntiJoin_impl test passed.\n");
+}
+
+
 // ------------------------------------------------------------------
-// Main test driver for combine: concat, merge, join
+// Main test driver for combine: concat, merge, join, + new functions
 // ------------------------------------------------------------------
 void testCombine(void)
 {
     printf("Running DataFrame combine tests...\n");
 
+    // existing
     testConcatBasic();
     testMergeBasic();
     testJoinBasic();
+    testUnion();
+    testIntersection();
+    testDifference();
+    testSemiJoin();
+    testAntiJoin();
 
     printf("All DataFrame combine tests passed successfully!\n");
 }

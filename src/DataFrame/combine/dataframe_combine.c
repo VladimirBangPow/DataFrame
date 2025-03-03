@@ -2,17 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include "../dataframe.h"  // Adjust as needed to match your project structure
+#include "../dataframe.h"
 
-/* 
- * Suppose you declare this somewhere in dataframe.h:
- *   typedef enum { JOIN_INNER, JOIN_LEFT, JOIN_RIGHT } JoinType;
- *
- *   typedef DataFrame (*DataFrameConcatFunc)(const DataFrame*, const DataFrame*);
- *   typedef DataFrame (*DataFrameMergeFunc)(const DataFrame*, const DataFrame*, const char*, const char*);
- *   typedef DataFrame (*DataFrameJoinFunc)(const DataFrame*, const DataFrame*, const char*, const char*, JoinType);
- * etc.
- */
 
 /* -------------------------------------------------------------------------
  * 1) dfConcat_impl
@@ -902,4 +893,647 @@ DataFrame dfJoin_impl(const DataFrame* left,
     free(matchedRight);
 
     return output;
+}
+
+
+/**
+ * @brief dfUnion_impl
+ * Return a new DF with all unique rows from dfA and dfB combined.
+ * Requires same schema (column count, names, types in same order).
+ */
+DataFrame dfUnion_impl(const DataFrame* dfA, const DataFrame* dfB)
+{
+    // Step 1) row-wise concat
+    DataFrame combined = dfConcat_impl(dfA, dfB);
+
+    // Step 2) remove duplicates (naive approach)
+    // We'll do an O(n^2) pass that checks row i vs row j for duplicates.
+    // If you already have a "dropDuplicates" function, just call it:
+    //   DataFrame result = combined.dropDuplicates(&combined, NULL, 0);
+    //   DataFrame_Destroy(&combined);
+    //   return result;
+    // For demonstration, let's do it inline:
+
+    size_t nRows = combined.numRows(&combined);
+    size_t nCols = combined.numColumns(&combined);
+
+    bool* toRemove = (bool*)calloc(nRows, sizeof(bool));
+
+    for (size_t i = 0; i < nRows; i++) {
+        if (toRemove[i]) continue; // already marked
+        for (size_t j = i + 1; j < nRows; j++) {
+            if (toRemove[j]) continue;
+            // compare row i, row j
+            bool same = true;
+            void** rowI = NULL;
+            void** rowJ = NULL;
+            combined.getRow(&combined, i, &rowI);
+            combined.getRow(&combined, j, &rowJ);
+
+            for (size_t c = 0; c < nCols; c++) {
+                // We can do a string compare if DF_STRING, or memcmp if numeric.
+                // But since getRow returned pointers, we compare by type?
+                // If your aggregator has the types, let's do a naive approach:
+                const Series* s = combined.getSeries(&combined, c);
+                switch(s->type) {
+                    case DF_INT: {
+                        int* vi = (int*)rowI[c];
+                        int* vj = (int*)rowJ[c];
+                        if (!vi || !vj || (*vi != *vj)) same=false;
+                    } break;
+                    case DF_DOUBLE: {
+                        double* di = (double*)rowI[c];
+                        double* dj = (double*)rowJ[c];
+                        if (!di || !dj || (*di != *dj)) same=false;
+                    } break;
+                    case DF_STRING: {
+                        char* si = (char*)rowI[c];
+                        char* sj = (char*)rowJ[c];
+                        if (!si || !sj || (strcmp(si, sj)!=0)) same=false;
+                    } break;
+                    case DF_DATETIME: {
+                        long long* li = (long long*)rowI[c];
+                        long long* lj = (long long*)rowJ[c];
+                        if (!li || !lj || (*li != *lj)) same=false;
+                    } break;
+                }
+                if (!same) break;
+            }
+
+            // free rowI, rowJ
+            for (size_t cc=0; cc<nCols; cc++) {
+                if (rowI && rowI[cc]) free(rowI[cc]);
+                if (rowJ && rowJ[cc]) free(rowJ[cc]);
+            }
+            free(rowI);
+            free(rowJ);
+
+            if (same) {
+                toRemove[j] = true; // mark row j as duplicate
+            }
+        }
+    }
+
+    // Now we have an array toRemove[] marking duplicates
+    // Build a final DataFrame without those rows:
+    DataFrame result;
+    DataFrame_Create(&result);
+
+    // Create empty columns with same schema
+    for (size_t c=0; c< nCols; c++){
+        const Series* sc = combined.getSeries(&combined, c);
+        Series newS;
+        seriesInit(&newS, sc->name, sc->type);
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+
+    // add rows if !toRemove[r]
+    for (size_t r=0; r<nRows; r++){
+        if (!toRemove[r]) {
+            // get row r
+            void** rowData=NULL;
+            combined.getRow(&combined, r, &rowData);
+            result.addRow(&result, (const void**)rowData);
+
+            // free rowData
+            for (size_t cc=0; cc<nCols; cc++) {
+                if (rowData[cc]) free(rowData[cc]);
+            }
+            free(rowData);
+        }
+    }
+
+    free(toRemove);
+    DataFrame_Destroy(&combined);
+    return result;
+}
+
+
+DataFrame dfIntersection_impl(const DataFrame* dfA, const DataFrame* dfB)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!dfA || !dfB) return result;
+
+    // Must have same columns (name, type, count) => 
+    // we can either do the same checks as dfConcat_impl does.
+    // For brevity, let's assume they match.
+
+    // We'll build an empty result with same schema
+    size_t nCols = dfA->numColumns(dfA);
+    for (size_t c=0; c< nCols; c++){
+        const Series* sA= dfA->getSeries(dfA, c);
+        Series newS;
+        seriesInit(&newS, sA->name, sA->type);
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+
+    // For each row in A => check if it also appears in B.
+    size_t aRows = dfA->numRows(dfA);
+    for (size_t ar=0; ar< aRows; ar++){
+        // read row from A
+        void** rowData=NULL;
+        dfA->getRow(dfA, ar, &rowData);
+        // check if rowData exists in B
+        bool found = false;
+        size_t bRows = dfB->numRows(dfB);
+
+        for (size_t br=0; br< bRows; br++){
+            void** rowB = NULL;
+            dfB->getRow(dfB, br, &rowB);
+            // compare rowData vs rowB
+            bool same = true;
+            for (size_t c=0; c< nCols; c++){
+                if (!rowData[c] || !rowB[c]) {
+                    // if one is null => row mismatch
+                    same=false; 
+                    break;
+                }
+                const Series* sA= dfA->getSeries(dfA, c);
+                switch(sA->type) {
+                    case DF_INT:
+                        if ( *((int*)rowData[c]) != *((int*)rowB[c]) ) same=false;
+                        break;
+                    case DF_DOUBLE:
+                        if ( *((double*)rowData[c]) != *((double*)rowB[c]) ) same=false;
+                        break;
+                    case DF_STRING:
+                        if (strcmp((char*)rowData[c], (char*)rowB[c])!=0) same=false;
+                        break;
+                    case DF_DATETIME:
+                        if ( *((long long*)rowData[c]) != *((long long*)rowB[c]) ) same=false;
+                        break;
+                }
+                if (!same) break;
+            }
+
+            // free rowB
+            for (size_t cc=0; cc< nCols; cc++){
+                if (rowB[cc]) free(rowB[cc]);
+            }
+            free(rowB);
+
+            if (same){
+                found=true;
+                break;
+            }
+        }
+
+        if (found) {
+            // add rowData to result
+            result.addRow(&result, (const void**)rowData);
+        }
+
+        // free rowData
+        for (size_t cc=0; cc<nCols; cc++){
+            if (rowData[cc]) free(rowData[cc]);
+        }
+        free(rowData);
+    }
+
+    // optionally drop duplicates if you want a pure set intersection
+    // or rely on existing dropDuplicates function
+    DataFrame finalNoDup = result.dropDuplicates(&result, NULL, 0);
+    DataFrame_Destroy(&result);
+    return finalNoDup;
+}
+
+
+DataFrame dfDifference_impl(const DataFrame* dfA, const DataFrame* dfB)
+{
+    // same approach as intersection, but we keep rows that are *not* found in B.
+    DataFrame result;
+    DataFrame_Create(&result);
+
+    if (!dfA || !dfB) return result;
+
+    // assume same columns
+    size_t nCols = dfA->numColumns(dfA);
+    // build result schema
+    for (size_t c=0; c<nCols; c++){
+        const Series* sA= dfA->getSeries(dfA, c);
+        Series newS;
+        seriesInit(&newS, sA->name, sA->type);
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+
+    size_t aRows= dfA->numRows(dfA);
+    for (size_t ar=0; ar < aRows; ar++){
+        void** rowData=NULL;
+        dfA->getRow(dfA, ar, &rowData);
+
+        bool foundInB= false;
+        size_t bRows= dfB->numRows(dfB);
+        for (size_t br=0; br< bRows; br++){
+            // compare row ar in A with row br in B
+            void** rowB=NULL;
+            dfB->getRow(dfB, br, &rowB);
+            bool same=true;
+            for (size_t c=0; c<nCols; c++){
+                if (!rowData[c] || !rowB[c]) {same=false; break;}
+                const Series* s= dfA->getSeries(dfA, c);
+                switch(s->type){
+                    case DF_INT:
+                        if (*(int*)rowData[c] != *(int*)rowB[c]) same=false;
+                        break;
+                    case DF_DOUBLE:
+                        if (*(double*)rowData[c] != *(double*)rowB[c]) same=false;
+                        break;
+                    case DF_STRING:
+                        if (strcmp((char*)rowData[c], (char*)rowB[c])!=0) same=false;
+                        break;
+                    case DF_DATETIME:
+                        if (*(long long*)rowData[c] != *(long long*)rowB[c]) same=false;
+                        break;
+                }
+                if (!same) break;
+            }
+            // free rowB
+            for (size_t cc=0; cc<nCols; cc++){
+                if (rowB[cc]) free(rowB[cc]);
+            }
+            free(rowB);
+
+            if (same){
+                foundInB=true;
+                break;
+            }
+        }
+
+        // if NOT found in B => keep row
+        if (!foundInB){
+            result.addRow(&result, (const void**)rowData);
+        }
+
+        // free rowData
+        for (size_t cc=0; cc<nCols; cc++){
+            if (rowData[cc]) free(rowData[cc]);
+        }
+        free(rowData);
+    }
+
+    return result;
+}
+
+
+DataFrame dfSemiJoin_impl(const DataFrame* left, 
+                          const DataFrame* right,
+                          const char* leftKey,
+                          const char* rightKey)
+{
+    // 1) Check valid
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!left || !right || !leftKey || !rightKey) return result;
+
+    // 2) find leftKeyIndex, rightKeyIndex
+    size_t leftCols = left->numColumns(left);
+    size_t rightCols= right->numColumns(right);
+    size_t leftKeyIndex=(size_t)-1, rightKeyIndex=(size_t)-1;
+
+    for (size_t i=0; i<leftCols; i++){
+        const Series* s= left->getSeries(left,i);
+        if (strcmp(s->name, leftKey)==0) {
+            leftKeyIndex= i;
+            break;
+        }
+    }
+    for (size_t i=0; i<rightCols; i++){
+        const Series* s= right->getSeries(right,i);
+        if (strcmp(s->name, rightKey)==0) {
+            rightKeyIndex= i;
+            break;
+        }
+    }
+    if (leftKeyIndex==(size_t)-1 || rightKeyIndex==(size_t)-1) {
+        fprintf(stderr,"dfSemiJoin_impl: key not found.\n");
+        return result;
+    }
+
+    // 3) build result with same columns as left
+    for (size_t c=0; c< leftCols; c++){
+        const Series* sL= left->getSeries(left, c);
+        Series newS;
+        seriesInit(&newS, sL->name, sL->type);
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+
+    // 4) for each row in left => check if there's a match in right => if yes => add row
+    const Series* sLeftKey= left->getSeries(left, leftKeyIndex);
+    const Series* sRightKey= right->getSeries(right, rightKeyIndex);
+    if (!sLeftKey || !sRightKey) return result;
+
+    // key type must match
+    if (sLeftKey->type != sRightKey->type) {
+        fprintf(stderr,"dfSemiJoin_impl: key type mismatch.\n");
+        return result;
+    }
+
+    size_t lRows= left->numRows(left);
+    size_t rRows= right->numRows(right);
+
+    for (size_t lr=0; lr< lRows; lr++){
+        bool matched=false;
+        // read left key value
+        switch (sLeftKey->type){
+            case DF_INT:{
+                int lv;
+                if (!seriesGetInt(sLeftKey, lr, &lv)) break;
+                // search right
+                for (size_t rr=0; rr< rRows; rr++){
+                    int rv;
+                    if (!seriesGetInt(sRightKey, rr, &rv)) continue;
+                    if (lv==rv){ matched=true; break; }
+                }
+            } break;
+            case DF_DOUBLE:{
+                double lv;
+                if (!seriesGetDouble(sLeftKey, lr, &lv)) break;
+                for (size_t rr=0; rr< rRows; rr++){
+                    double rv;
+                    if (!seriesGetDouble(sRightKey, rr, &rv)) continue;
+                    if (lv==rv){ matched=true; break; }
+                }
+            } break;
+            case DF_STRING:{
+                char* lv=NULL;
+                if (!seriesGetString(sLeftKey, lr, &lv)) break;
+                for (size_t rr=0; rr< rRows; rr++){
+                    char* rv=NULL;
+                    if (!seriesGetString(sRightKey, rr, &rv)) continue;
+                    if (strcmp(lv, rv)==0){ matched=true; free(rv); break; }
+                    free(rv);
+                }
+                if (lv) free(lv);
+            } break;
+            case DF_DATETIME:{
+                long long lv;
+                if (!seriesGetDateTime(sLeftKey, lr, &lv)) break;
+                for (size_t rr=0; rr< rRows; rr++){
+                    long long rv;
+                    if (!seriesGetDateTime(sRightKey, rr, &rv)) continue;
+                    if (lv==rv){ matched=true; break; }
+                }
+            } break;
+        }
+        if (matched){
+            // add entire left row
+            void** rowData=NULL;
+            left->getRow(left, lr, &rowData);
+            result.addRow(&result, (const void**)rowData);
+            // free rowData
+            size_t nLC= left->numColumns(left);
+            for (size_t c=0; c<nLC; c++){
+                if (rowData[c]) free(rowData[c]);
+            }
+            free(rowData);
+        }
+    }
+    return result;
+}
+
+
+DataFrame dfAntiJoin_impl(const DataFrame* left,
+                          const DataFrame* right,
+                          const char* leftKey,
+                          const char* rightKey)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!left || !right || !leftKey || !rightKey) return result;
+
+    // find leftKeyIndex, rightKeyIndex
+    size_t lCols= left->numColumns(left);
+    size_t rCols= right->numColumns(right);
+    size_t leftKeyIndex=(size_t)-1, rightKeyIndex=(size_t)-1;
+
+    for (size_t i=0; i<lCols; i++){
+        const Series* s= left->getSeries(left,i);
+        if (s && strcmp(s->name,leftKey)==0){ leftKeyIndex=i; break; }
+    }
+    for (size_t i=0; i< rCols; i++){
+        const Series* s= right->getSeries(right,i);
+        if (s && strcmp(s->name,rightKey)==0){ rightKeyIndex=i; break; }
+    }
+    if (leftKeyIndex==(size_t)-1 || rightKeyIndex==(size_t)-1){
+        fprintf(stderr,"dfAntiJoin: key not found.\n");
+        return result;
+    }
+
+    // build result with same columns as left
+    for (size_t c=0; c<lCols; c++){
+        const Series* sL= left->getSeries(left,c);
+        Series newS;
+        seriesInit(&newS, sL->name, sL->type);
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+
+    const Series* sLeftKey= left->getSeries(left, leftKeyIndex);
+    const Series* sRightKey= right->getSeries(right, rightKeyIndex);
+    if (!sLeftKey || !sRightKey) return result;
+    if (sLeftKey->type != sRightKey->type){
+        fprintf(stderr,"dfAntiJoin: key type mismatch.\n");
+        return result;
+    }
+
+    size_t lRows= left->numRows(left);
+    size_t rRows= right->numRows(right);
+
+    // for each row in left => check if it matches any in right => if no => keep
+    for (size_t lr=0; lr<lRows; lr++){
+        bool matched=false;
+        switch (sLeftKey->type){
+            case DF_INT:{
+                int lv;
+                if (!seriesGetInt(sLeftKey, lr, &lv)) break;
+                for (size_t rr=0; rr< rRows; rr++){
+                    int rv;
+                    if (!seriesGetInt(sRightKey, rr, &rv)) continue;
+                    if (lv==rv){ matched=true; break; }
+                }
+            } break;
+            case DF_DOUBLE:{
+                double lv;
+                if (!seriesGetDouble(sLeftKey, lr, &lv)) break;
+                for (size_t rr=0; rr< rRows; rr++){
+                    double rv;
+                    if (!seriesGetDouble(sRightKey, rr, &rv)) continue;
+                    if (lv==rv){ matched=true; break; }
+                }
+            } break;
+            case DF_STRING:{
+                char* lv=NULL;
+                if (!seriesGetString(sLeftKey, lr, &lv)) break;
+                for (size_t rr=0; rr< rRows; rr++){
+                    char* rv=NULL;
+                    if (!seriesGetString(sRightKey, rr, &rv)) continue;
+                    if (strcmp(lv, rv)==0){ matched=true; free(rv); break; }
+                    free(rv);
+                }
+                if (lv) free(lv);
+            } break;
+            case DF_DATETIME:{
+                long long lv;
+                if (!seriesGetDateTime(sLeftKey, lr, &lv)) break;
+                for (size_t rr=0; rr< rRows; rr++){
+                    long long rv;
+                    if (!seriesGetDateTime(sRightKey, rr, &rv)) continue;
+                    if (lv==rv){ matched=true; break; }
+                }
+            } break;
+        }
+        if (!matched){
+            // add entire left row
+            void** rowData=NULL;
+            left->getRow(left, lr, &rowData);
+            result.addRow(&result, (const void**)rowData);
+            // free rowData
+            for (size_t c=0; c<lCols; c++){
+                if (rowData[c]) free(rowData[c]);
+            }
+            free(rowData);
+        }
+    }
+
+    return result;
+}
+
+
+DataFrame dfCrossJoin_impl(const DataFrame* left,
+                           const DataFrame* right)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!left || !right) return result;
+
+    size_t leftCols= left->numColumns(left);
+    size_t rightCols= right->numColumns(right);
+    // Build columns => left columns + right columns
+    size_t totalCols= leftCols + rightCols;
+    Series* outCols= (Series*)calloc(totalCols, sizeof(Series));
+
+    // init from left
+    for (size_t c=0; c<leftCols; c++){
+        const Series* sL= left->getSeries(left,c);
+        seriesInit(&outCols[c], sL->name, sL->type);
+    }
+    // init from right
+    for (size_t c=0; c< rightCols; c++){
+        const Series* sR= right->getSeries(right,c);
+        seriesInit(&outCols[leftCols + c], sR->name, sR->type);
+    }
+
+    size_t lRows= left->numRows(left);
+    size_t rRows= right->numRows(right);
+
+    // for each row in left => each row in right => produce combined row
+    for (size_t lr=0; lr< lRows; lr++){
+        // read left row
+        void** rowLeft= NULL;
+        left->getRow(left, lr, &rowLeft);
+
+        for (size_t rr=0; rr< rRows; rr++){
+            void** rowRight=NULL;
+            right->getRow(right, rr, &rowRight);
+
+            // add to outCols => copy left row into [0..leftCols-1], 
+            //                  copy right row into [leftCols..end]
+            // This means we do "append" to each column.
+            for (size_t c=0; c< leftCols; c++){
+                // rowLeft[c] is the cell in left
+                const Series* sL= left->getSeries(left,c);
+                switch(sL->type){
+                    case DF_INT:
+                        if (rowLeft[c]) {
+                            seriesAddInt(&outCols[c], *(int*)rowLeft[c]);
+                        } else {
+                            seriesAddInt(&outCols[c], 0);
+                        }
+                        break;
+                    case DF_DOUBLE:
+                        if (rowLeft[c]) {
+                            seriesAddDouble(&outCols[c], *(double*)rowLeft[c]);
+                        } else {
+                            seriesAddDouble(&outCols[c], 0.0);
+                        }
+                        break;
+                    case DF_STRING:
+                        if (rowLeft[c]) {
+                            seriesAddString(&outCols[c], (char*)rowLeft[c]);
+                        } else {
+                            seriesAddString(&outCols[c], "NA");
+                        }
+                        break;
+                    case DF_DATETIME:
+                        if (rowLeft[c]) {
+                            seriesAddDateTime(&outCols[c], *(long long*)rowLeft[c]);
+                        } else {
+                            seriesAddDateTime(&outCols[c], 0LL);
+                        }
+                        break;
+                }
+            }
+            for (size_t c=0; c< rightCols; c++){
+                const Series* sR= right->getSeries(right,c);
+                size_t outIndex= leftCols + c;
+                switch(sR->type){
+                    case DF_INT:
+                        if (rowRight[c]) {
+                            seriesAddInt(&outCols[outIndex], *(int*)rowRight[c]);
+                        } else {
+                            seriesAddInt(&outCols[outIndex], 0);
+                        }
+                        break;
+                    case DF_DOUBLE:
+                        if (rowRight[c]) {
+                            seriesAddDouble(&outCols[outIndex], *(double*)rowRight[c]);
+                        } else {
+                            seriesAddDouble(&outCols[outIndex], 0.0);
+                        }
+                        break;
+                    case DF_STRING:
+                        if (rowRight[c]) {
+                            seriesAddString(&outCols[outIndex], (char*)rowRight[c]);
+                        } else {
+                            seriesAddString(&outCols[outIndex], "NA");
+                        }
+                        break;
+                    case DF_DATETIME:
+                        if (rowRight[c]) {
+                            seriesAddDateTime(&outCols[outIndex], *(long long*)rowRight[c]);
+                        } else {
+                            seriesAddDateTime(&outCols[outIndex], 0LL);
+                        }
+                        break;
+                }
+            }
+            // free rowRight
+            for (size_t rc=0; rc< rightCols; rc++){
+                if (rowRight[rc]) free(rowRight[rc]);
+            }
+            free(rowRight);
+        }
+
+        // free rowLeft
+        for (size_t lc=0; lc< leftCols; lc++){
+            if (rowLeft[lc]) free(rowLeft[lc]);
+        }
+        free(rowLeft);
+    }
+
+    // build final DataFrame
+    DataFrame out;
+    DataFrame_Create(&out);
+    for (size_t c=0; c< totalCols; c++){
+        out.addSeries(&out, &outCols[c]);
+        seriesFree(&outCols[c]);
+    }
+    free(outCols);
+
+    return out;
 }

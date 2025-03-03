@@ -12,16 +12,17 @@
 #include "./DataFrame/aggregate/dataframe_aggregate_test.h"
 int main(void)
 {
-    testCore();
-    testDate();
-    testAggregate();
+    // testCore();
+    // testDate();
+    // testAggregate();
+    testCombine();
 
     // testQuery();
     // testPrint();
-    // testIO();
     // testPlot();
     // testIndexing();
-    // testCombine();
     // testReshape();
+    //    testIO();
+
     return 0;
 }

@@ -9,10 +9,10 @@
 // typedef bool (*RowPredicate)(const struct DataFrame*, size_t);
 // typedef void (*RowFunction)(struct DataFrame* outDF, const struct DataFrame* inDF, size_t rowIndex);
 
-/* 
-   Forward declarations of all *impl functions from other .c files 
-   (matching return types exactly).
-*/
+/* -------------------------------------------------------------------------
+ *  Forward declarations of all *impl functions from other .c files 
+ *  (matching return types exactly).
+ * ------------------------------------------------------------------------- */
 extern void dfInit_impl(DataFrame* df);
 extern void dfFree_impl(DataFrame* df);
 extern bool dfAddSeries_impl(DataFrame* df, const Series* s);
@@ -46,26 +46,24 @@ extern double   dfMean_impl(const DataFrame* df, size_t colIndex);
 extern double   dfMin_impl(const DataFrame* df, size_t colIndex);
 extern double   dfMax_impl(const DataFrame* df, size_t colIndex);
 
-/* Additional aggregator impls (we assume you have them in some .c file) */
-extern double dfCount_impl(const DataFrame* df, size_t colIndex);
-extern double dfMedian_impl(const DataFrame* df, size_t colIndex);
-extern double dfMode_impl(const DataFrame* df, size_t colIndex);
-extern double dfStd_impl(const DataFrame* df, size_t colIndex);   // likely
-extern double dfVar_impl(const DataFrame* df, size_t colIndex);
-extern double dfRange_impl(const DataFrame* df, size_t colIndex);
-extern double dfQuantile_impl(const DataFrame* df, size_t colIndex, double q);
-extern double dfIQR_impl(const DataFrame* df, size_t colIndex);
-extern double dfNullCount_impl(const DataFrame* df, size_t colIndex);
-extern double dfUniqueCount_impl(const DataFrame* df, size_t colIndex);
-extern double dfProduct_impl(const DataFrame* df, size_t colIndex);
-extern double dfNthLargest_impl(const DataFrame* df, size_t colIndex, size_t n);
-extern double dfNthSmallest_impl(const DataFrame* df, size_t colIndex, size_t n);
-extern double dfSkewness_impl(const DataFrame* df, size_t colIndex);
-extern double dfKurtosis_impl(const DataFrame* df, size_t colIndex);
-extern double dfCovariance_impl(const DataFrame* df, size_t colIndex1, size_t colIndex2);
-extern double dfCorrelation_impl(const DataFrame* df, size_t colIndexX, size_t colIndexY);
+extern double   dfCount_impl(const DataFrame* df, size_t colIndex);
+extern double   dfMedian_impl(const DataFrame* df, size_t colIndex);
+extern double   dfMode_impl(const DataFrame* df, size_t colIndex);
+extern double   dfStd_impl(const DataFrame* df, size_t colIndex);
+extern double   dfVar_impl(const DataFrame* df, size_t colIndex);
+extern double   dfRange_impl(const DataFrame* df, size_t colIndex);
+extern double   dfQuantile_impl(const DataFrame* df, size_t colIndex, double q);
+extern double   dfIQR_impl(const DataFrame* df, size_t colIndex);
+extern double   dfNullCount_impl(const DataFrame* df, size_t colIndex);
+extern double   dfUniqueCount_impl(const DataFrame* df, size_t colIndex);
+extern double   dfProduct_impl(const DataFrame* df, size_t colIndex);
+extern double   dfNthLargest_impl(const DataFrame* df, size_t colIndex, size_t n);
+extern double   dfNthSmallest_impl(const DataFrame* df, size_t colIndex, size_t n);
+extern double   dfSkewness_impl(const DataFrame* df, size_t colIndex);
+extern double   dfKurtosis_impl(const DataFrame* df, size_t colIndex);
+extern double   dfCovariance_impl(const DataFrame* df, size_t colIndex1, size_t colIndex2);
+extern double   dfCorrelation_impl(const DataFrame* df, size_t colIndexX, size_t colIndexY);
 
-/* Additional DataFrame returning transforms */
 extern DataFrame dfUniqueValues_impl(const DataFrame* df, size_t colIndex);
 extern DataFrame dfValueCounts_impl(const DataFrame* df, size_t colIndex);
 extern DataFrame dfCumulativeSum_impl(const DataFrame* df, size_t colIndex);
@@ -73,7 +71,6 @@ extern DataFrame dfCumulativeProduct_impl(const DataFrame* df, size_t colIndex);
 extern DataFrame dfCumulativeMax_impl(const DataFrame* df, size_t colIndex);
 extern DataFrame dfCumulativeMin_impl(const DataFrame* df, size_t colIndex);
 
-/* Others */
 extern DataFrame dfTranspose_impl(const DataFrame* df);
 extern size_t    dfIndexOf_impl(const DataFrame* df, size_t colIndex, double value);
 extern DataFrame dfApply_impl(const DataFrame* df, RowFunction);
@@ -90,10 +87,18 @@ extern DataFrame dfInsert_impl(DataFrame* df, size_t colIndex, const Series* s);
 extern DataFrame dfIndex_impl(const DataFrame* df);
 extern DataFrame dfColumns_impl(const DataFrame* df);
 
+/* Existing combine: */
 extern DataFrame dfConcat_impl(const DataFrame*, const DataFrame*);
 extern DataFrame dfMerge_impl(const DataFrame*, const DataFrame*, const char*, const char*);
 extern DataFrame dfJoin_impl(const DataFrame*, const DataFrame*, const char*, const char*, JoinType);
 
+/* NEW combine functions: */
+extern DataFrame dfUnion_impl(const DataFrame* dfA, const DataFrame* dfB);
+extern DataFrame dfIntersection_impl(const DataFrame* dfA, const DataFrame* dfB);
+extern DataFrame dfDifference_impl(const DataFrame* dfA, const DataFrame* dfB);
+extern DataFrame dfSemiJoin_impl(const DataFrame* left, const DataFrame* right, const char* leftKey, const char* rightKey);
+extern DataFrame dfAntiJoin_impl(const DataFrame* left, const DataFrame* right, const char* leftKey, const char* rightKey);
+extern DataFrame dfCrossJoin_impl(const DataFrame* left, const DataFrame* right);
 
 /* Other non-query methods: */
 extern void dfPrint_impl(const DataFrame* df);
@@ -195,7 +200,7 @@ void DataFrame_Create(DataFrame* df)
     df->addRow       = dfAddRow_impl;
     df->getRow       = dfGetRow_impl;
 
-    // Now the "query" pointers that return DataFrame:
+    // The "query" pointers that return DataFrame:
     df->head         = dfHead_impl;
     df->tail         = dfTail_impl;
     df->describe     = dfDescribe_impl;
@@ -219,11 +224,11 @@ void DataFrame_Create(DataFrame* df)
     df->min          = dfMin_impl;
     df->max          = dfMax_impl;
 
-    // *** Additional aggregator pointers ***
+    // Additional aggregator pointers
     df->count        = dfCount_impl;
     df->median       = dfMedian_impl;
     df->mode         = dfMode_impl;
-    df->std          = dfStd_impl;  // be sure you have an implementation
+    df->std          = dfStd_impl;
     df->var          = dfVar_impl;
     df->range        = dfRange_impl;
     df->quantile     = dfQuantile_impl;
@@ -283,10 +288,18 @@ void DataFrame_Create(DataFrame* df)
     df->datetimeBetween   = dfDatetimeBetween_impl;
     df->datetimeClamp     = dfDatetimeClamp_impl;
 
-    // Combining:
+    // Existing combining:
     df->concat       = dfConcat_impl;
     df->merge        = dfMerge_impl;
     df->join         = dfJoin_impl;
+
+    // New combining:
+    df->unionDF      = dfUnion_impl;          // "union" might be a reserved word, so "unionDF"
+    df->intersectionDF = dfIntersection_impl; // intersection
+    df->differenceDF   = dfDifference_impl;   // difference
+    df->semiJoin     = dfSemiJoin_impl;       
+    df->antiJoin     = dfAntiJoin_impl;
+    df->crossJoin    = dfCrossJoin_impl;
 
     // Finally, call init
     df->init(df);
@@ -511,8 +524,7 @@ bool dfGetRow_impl(const DataFrame* df, size_t rowIndex, void*** outRow)
                     break;
                 }
                 // We can just store strVal pointer directly (already allocated)
-                // But note the user must free rowData[c] eventually
-                rowData[c] = strVal; // no extra malloc needed
+                rowData[c] = strVal; 
             } break;
 
             case DF_DATETIME: {

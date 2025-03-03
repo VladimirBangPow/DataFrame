@@ -74,7 +74,6 @@ typedef DataFrame (*DataFrameConcatFunc)(const DataFrame*, const DataFrame*);
 typedef DataFrame (*DataFrameMergeFunc)(const DataFrame*, const DataFrame*, const char*, const char*);
 typedef DataFrame (*DataFrameJoinFunc)(const DataFrame*, const DataFrame*, const char*, const char*, JoinType);
 
-
 /* 
    For filtering, we need the RowPredicate we defined above:
 */
@@ -94,12 +93,7 @@ typedef double (*DataFrameMeanFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMinFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMaxFunc)(const DataFrame* df, size_t colIndex);
 
-/* -------------------------------------------------------------------------
- * ADDITIONAL AGGREGATIONS/TRANSFORMS
- * ------------------------------------------------------------------------- */
-// We'll declare the rest returning double or DataFrame as needed:
-
-/* Additional stats returning double */
+/* Additional aggregator function pointers */
 typedef double (*DataFrameCountFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMedianFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameModeFunc)(const DataFrame* df, size_t colIndex);
@@ -145,49 +139,51 @@ typedef void   (*DataFramePlotFunc)(const DataFrame* df,
 typedef bool   (*DataFrameConvertToDatetimeFunc)(DataFrame* df,
                                                    size_t dateColIndex,
                                                    const char* formatType);
-
 typedef bool  (*DataFrameDatetimeToStringFunc)(DataFrame* df, 
                                                 size_t dateColIndex, 
                                                 const char* outFormat);
-
 typedef DataFrame  (*DataFrameDatetimeFilterFunc)(const DataFrame* df,
-                                            size_t dateColIndex,
-                                            long long startEpoch,
-                                            long long endEpoch);
-
+                                                  size_t dateColIndex,
+                                                  long long startEpoch,
+                                                  long long endEpoch);
 typedef bool  (*DataFrameDatetimeTruncateFunc)(DataFrame* df,
-                                                size_t colIndex,
-                                                const char* unit);
+                                               size_t colIndex,
+                                               const char* unit);
 typedef bool  (*DataFrameDatetimeAddFunc)(DataFrame* df,
-                                           size_t dateColIndex,
-                                           long long msToAdd);
+                                          size_t dateColIndex,
+                                          long long msToAdd);
 typedef DataFrame  (*DataFrameDatetimeDiffFunc)(const DataFrame* df,
                                                 size_t col1Index,
                                                 size_t col2Index,
                                                 const char* newColName);
-
 typedef DataFrame (*DataFrameDatetimeExtractFunc)(const DataFrame* df,
-                                                   size_t dateColIndex,
-                                                   const char* const* fields,
-                                                   size_t numFields);
+                                                  size_t dateColIndex,
+                                                  const char* const* fields,
+                                                  size_t numFields);
 typedef DataFrame (*DataFrameDatetimeGroupByFunc)(const DataFrame* df, 
-                                                   size_t dateColIndex,
-                                                   const char* truncateUnit);
-
+                                                  size_t dateColIndex,
+                                                  const char* truncateUnit);
 typedef bool (*DataFrameDatetimeRoundFunc)(DataFrame* df, size_t colIndex, const char* unit);
-
 typedef bool (*DataFrameDatetimeRebaseFunc)(DataFrame* df, size_t colIndex, long long anchorMs);
-
 typedef DataFrame (*DataFrameDatetimeBetweenFunc)(const DataFrame* df,
                                                   size_t dateColIndex,
                                                   const char* startStr,
                                                   const char* endStr,
                                                   const char* formatType);
-
 typedef bool (*DataFrameDatetimeClampFunc)(const DataFrame* df,
                                            size_t colIndex,
                                            long long minMs,
                                            long long maxMs);
+
+/* -------------------------------------------------------------------------
+ * Additional "combine" function pointers
+ * ------------------------------------------------------------------------- */
+typedef DataFrame (*DataFrameUnionFunc)(const DataFrame*, const DataFrame*);
+typedef DataFrame (*DataFrameIntersectionFunc)(const DataFrame*, const DataFrame*);
+typedef DataFrame (*DataFrameDifferenceFunc)(const DataFrame*, const DataFrame*);
+typedef DataFrame (*DataFrameSemiJoinFunc)(const DataFrame*, const DataFrame*, const char*, const char*);
+typedef DataFrame (*DataFrameAntiJoinFunc)(const DataFrame*, const DataFrame*, const char*, const char*);
+typedef DataFrame (*DataFrameCrossJoinFunc)(const DataFrame*, const DataFrame*);
 
 /* -------------------------------------------------------------------------
  * The DataFrame struct itself
@@ -281,6 +277,14 @@ struct DataFrame {
     DataFrameConcatFunc            concat;
     DataFrameMergeFunc             merge;
     DataFrameJoinFunc              join;
+
+    /* Additional combining: */
+    DataFrameUnionFunc             unionDF;         // 'union' is a reserved word, so 'unionDF'
+    DataFrameIntersectionFunc      intersectionDF;
+    DataFrameDifferenceFunc        differenceDF;
+    DataFrameSemiJoinFunc          semiJoin;
+    DataFrameAntiJoinFunc          antiJoin;
+    DataFrameCrossJoinFunc         crossJoin;
 
     /* IO / Plotting / Conversion */
     DataFramePrintFunc             print;

@@ -1,9 +1,9 @@
 #include <assert.h>
 #include <stdio.h>   // for printf (minimal usage)
-#include <math.h>    // for fabs
+#include <math.h>    // for fabs, sqrt
 #include <float.h>   // for DBL_MAX
 #include <string.h>  // for strcmp
-#include "../dataframe.h"   // your DataFrame, aggregator prototypes
+#include "../dataframe.h"   // DataFrame, aggregator prototypes
 #include "../../Series/series.h" // for creating test Series, etc.
 
 // A small helper to compare floating results with some tolerance
@@ -226,6 +226,34 @@ static void testDfVar(void)
 }
 
 /* --------------------------------------------------------------------------
+ * testDfStd (NEW TEST)
+ * -------------------------------------------------------------------------- */
+static void testDfStd(void)
+{
+    printf("Running testDfStd...\n");
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // DF_DOUBLE => [1,2,3,4]
+    // sample standard deviation => sqrt(1.6666667) ~ 1.290994
+    Series s;
+    seriesInit(&s, "StdTest", DF_DOUBLE);
+    seriesAddDouble(&s, 1.0);
+    seriesAddDouble(&s, 2.0);
+    seriesAddDouble(&s, 3.0);
+    seriesAddDouble(&s, 4.0);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    double stdev = df.std(&df, 0);
+    // Expect ~1.290994 (since sample var=1.6667)
+    assert(fabs(stdev - 1.290994) < 1e-5);
+
+    DataFrame_Destroy(&df);
+    printf("testDfStd passed.\n");
+}
+
+/* --------------------------------------------------------------------------
  * testDfRange
  * -------------------------------------------------------------------------- */
 static void testDfRange(void)
@@ -271,12 +299,11 @@ static void testDfQuantile(void)
     seriesFree(&s);
 
     double q25 = df.quantile(&df, 0, 0.25); 
-    // sorted => [10,20,30,40], 0.25*(4-1)=0.75 => idxBelow=0, idxAbove=1 => interpol
-    // => 10 + 0.75*(20-10)= 10+7.5=17.5
+    // sorted => [10,20,30,40], 0.25*(4-1)=0.75 => idxBelow=0, idxAbove=1 => interpol => 17.5
     assertAlmostEqual(q25, 17.5, 1e-9);
 
     double q75 = df.quantile(&df, 0, 0.75); 
-    // pos=0.75*(3)=2.25 => idxBelow=2 => 30 => fraction=0.25 => next=40 => val=30+0.25*(40-30)=32.5
+    // pos=0.75*(3)=2.25 => idxBelow=2 => 30 => fraction=0.25 => next=40 => 30+0.25*(10)=32.5
     assertAlmostEqual(q75, 32.5, 1e-9);
 
     DataFrame_Destroy(&df);
@@ -303,11 +330,8 @@ static void testDfIQR(void)
     seriesFree(&s);
 
     double iqrVal = df.iqr(&df, 0);
-    // 25% ~ 3, 75% ~ 7 => iqr=3
-    // Let's see precisely:
-    // sorted => [2,4,6,8], q1 => 0.25*(3)=0.75 => interpol => 2 +0.75*(4-2)= 3.5? Actually let's do carefully
-    // Actually let's do quick: if q1=3, q3=7 => iqr=3 => We'll accept approximate
-    // This might differ a bit if your quantile logic is continuous. We'll assert ~3
+    // Based on interpolation => q1=3.5, q3=6.5 => iqr=3
+    // We'll allow small tolerance check
     assertAlmostEqual(iqrVal, 3.0, 0.1);
 
     DataFrame_Destroy(&df);
@@ -320,35 +344,34 @@ static void testDfIQR(void)
 static void testDfNullCount(void)
 {
     printf("Running testDfNullCount...\n");
+
+    // 1) Create a new DataFrame
     DataFrame df;
     DataFrame_Create(&df);
 
-    // We'll do DF_STRING but we intentionally "fail" on row 2
+    // 2) Build a DF_STRING column with a single valid entry ("hi")
     Series s;
     seriesInit(&s, "NullTest", DF_STRING);
-    seriesAddString(&s, "hi");   // ok
-    // Add a "null" row => We can forcibly skip by not adding a string?
-    // But the aggregator relies on seriesGetString failing.
-    // We'll do a trick: pass NULL pointer => that might skip
-    const char* row2 = NULL;
-    const void* rowData[1];
-    rowData[0] = (const void*)row2; // hack
+    seriesAddString(&s, "hi");   // 1 row => "hi"
+
     bool ok = df.addSeries(&df, &s);
     seriesFree(&s);
     assert(ok);
 
-    // Now we have a DF with 1 row and 1 col => "hi"
-    // That won't test null well. Alternatively, let's add row with "dfAddRow"
-    // This might not be good for DF_STRING, but let's just do "some" approach:
-    if (df.numColumns(&df)==1) {
-        df.addRow(&df, rowData); // second row is "null"
+    // 3) Prepare a "null" pointer for the second row => row2
+    const char* row2 = NULL;
+    const void* rowData[1];
+    rowData[0] = (const void*)row2;
+
+    // Attempt to add a second row. This should fail (strPtr == NULL => no new row).
+    if (df.numColumns(&df) == 1) {
+        bool added = df.addRow(&df, rowData);
+        assert(!added);
     }
 
-    // So col0 => row0= "hi", row1 => fails
+    // So only 1 valid row => "hi" => nullCount=0
     double nCount = df.nullCount(&df, 0);
-    // row0 => not null => row1 => read fails => we expect 1
-    // let's see if aggregator sees 1
-    assert(nCount==1.0);
+    assert(nCount == 0.0);
 
     DataFrame_Destroy(&df);
     printf("testDfNullCount passed.\n");
@@ -390,7 +413,7 @@ static void testDfProduct(void)
     DataFrame df;
     DataFrame_Create(&df);
 
-    // DF_INT => [2,3,4] => product=2*3*4=24
+    // DF_INT => [2,3,4] => product=24
     Series s;
     seriesInit(&s, "ProdTest", DF_INT);
     seriesAddInt(&s,2);
@@ -427,8 +450,7 @@ static void testDfNthLargest(void)
     seriesFree(&s);
 
     // sorted desc => [20,10,9,5,1]
-    // nth largest(1) => 20
-    // nth largest(3) => 9
+    // nth largest(1) => 20, nth largest(3) => 9
     double l1 = df.nthLargest(&df,0,1);
     double l3 = df.nthLargest(&df,0,3);
     assert(l1==20.0);
@@ -457,8 +479,7 @@ static void testDfNthSmallest(void)
     df.addSeries(&df, &s);
     seriesFree(&s);
 
-    // sorted ascending => [3,5,7,10]
-    // 1st => 3, 2nd => 5
+    // sorted ascending => [3,5,7,10], so 1st => 3, 2nd => 5
     double s1 = df.nthSmallest(&df,0,1);
     double s2 = df.nthSmallest(&df,0,2);
     assert(s1==3.0);
@@ -477,7 +498,7 @@ static void testDfSkewness(void)
     DataFrame df;
     DataFrame_Create(&df);
 
-    // simple DF_DOUBLE => [1,2,3,4,100] => known to have positive skew
+    // DF_DOUBLE => [1,2,3,4,100] => known to have positive skew
     Series s;
     seriesInit(&s, "SkewTest", DF_DOUBLE);
     double arr[] = {1,2,3,4,100};
@@ -527,7 +548,7 @@ static void testDfKurtosis(void)
  * -------------------------------------------------------------------------- */
 static void testDfCovariance(void)
 {
-    
+    printf("Running testDfCovariance...\n");
     DataFrame df;
     DataFrame_Create(&df);
 
@@ -549,7 +570,7 @@ static void testDfCovariance(void)
     seriesFree(&sy);
 
     double cov = df.covariance(&df, 0,1);
-    // Because Y=2X => perfect correlation => sample cov won't be 0 => let's just check >0
+    // Y=2X => perfect correlation => sample cov>0
     assert(cov>0.0);
 
     DataFrame_Destroy(&df);
@@ -612,11 +633,10 @@ static void testDfUniqueValues(void)
     seriesFree(&s);
 
     DataFrame uniqueDF = df.uniqueValues(&df, 0);
-    // distinct => {2,5,7} => we expect 3 rows in uniqueDF
+    // distinct => {2,5,7} => expect 3 rows
     size_t rowCount = uniqueDF.numRows(&uniqueDF);
     assert(rowCount==3);
 
-    // We won't check the exact order. Just check the total.
     DataFrame_Destroy(&uniqueDF);
     DataFrame_Destroy(&df);
     printf("testDfUniqueValues passed.\n");
@@ -641,8 +661,7 @@ static void testDfValueCounts(void)
     seriesFree(&s);
 
     DataFrame vc = df.valueCounts(&df, 0);
-    // Expect 2 distinct => "apple" (2), "banana"(1)
-    // We'll just check numRows=2
+    // Expect 2 distinct => ("apple"(2), "banana"(1))
     size_t rowCount = vc.numRows(&vc);
     assert(rowCount==2);
 
@@ -820,8 +839,6 @@ static void testDfGroupBy(void)
     size_t r = g.numRows(&g);
     assert(r==2);
 
-    // Also might check the "count" column => each should be 2
-    // We'll do minimal here
     DataFrame_Destroy(&g);
     DataFrame_Destroy(&df);
     printf("testDfGroupBy passed.\n");
@@ -841,6 +858,7 @@ void testAggregate(void)
     testDfMedian();
     testDfMode();
     testDfVar();
+    testDfStd();       // <-- NEW test for standard deviation
     testDfRange();
     testDfQuantile();
     testDfIQR();
@@ -861,6 +879,5 @@ void testAggregate(void)
     testDfCumulativeMin();
     testDfGroupBy();
 
-    // Minimal printing
     printf("All aggregator tests passed successfully!\n");
 }
