@@ -858,39 +858,161 @@
 
 # Aggregate::double sum(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function computes the sum of that column’s values by iterating through each row and **accumulating** the entries that successfully read. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\sum_{r=0}^{n-1} x_r$
+
+
+
+
+
 # Aggregate::double mean(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **mean** of that column’s values by summing all valid entries and dividing by the total number of rows. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\displaystyle \frac{1}{n} \sum_{r=0}^{n-1} x_r$
+
 
 # Aggregate::double min(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function finds the **minimum** of that column’s values by iterating through each row and keeping track of the smallest entry encountered. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\displaystyle \min_{0 \le r < n} \ x_r$
+
 # Aggregate::double max(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function finds the **maximum** of that column’s values by iterating through each row and keeping track of the largest entry encountered. Formally, if the column has \(n\) rows and we denote the value in row \(r\) as \(x_r\), then:
+
+# $\displaystyle \max_{0 \le r < n} \ x_r$
 
 # Aggregate::double count(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **count** of valid (non-null) entries in that column by iterating over each row and incrementing for every successfully read value.
+
+# $\displaystyle \sum_{r=0}^{n-1} \mathbf{I}(x_r\ \text{is not null})$
+
 # Aggregate::double median(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **median** of the column’s numeric values by sorting them. 
+
+
+
 # Aggregate::double mode(const DataFrame* df, size_t colIndex)
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **mode** of the column’s numeric values by sorting them. 
+
+
 
 # Aggregate::double std(const DataFrame* df, size_t colIndex)
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **standard deviation** of the column’s numeric values. The **sample** standard deviation is:
+
+# $\sigma={\sqrt {\frac {\sum(x_{i}-{\mu})^{2}}{N}}}$
+- $\sigma$	=	population standard deviation
+- $N$	=	the size of the population
+- $x_i$	=	each value from the population
+- $\mu$	=	the population mean
 
 # Aggregate:: double var(const DataFrame* df, size_t colIndex)
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **variance** of the column’s numeric values.
+
+# $S^2 = \frac{\sum (x_i - \bar{x})^2}{n - 1}$
+- $S^2$	=	sample variance
+- $x_i$	=	the value of the one observation
+- $\bar{x}$	=	the mean value of all observations
+- $n$	=	the number of observations
 
 # Aggregate:: double range(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **range** of the column’s numeric values by computing the difference between the maximum and the minimum. If $\(n\)$ is the number of valid rows, and $\(x_r\)$ is the value in row $\(r\)$, then:
+
+# $\displaystyle \text{range} = \max_{0 \le r < n} x_r - \min_{0 \le r < n} x_r$
+
 # Aggregate:: double quantile(const DataFrame* df, size_t colIndex, double q)
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **$\(\alpha\)$-quantile** of the column’s numeric values. 
+
+![image](https://github.com/user-attachments/assets/6a83d415-c6f3-4893-b85a-80746afdb26c)
+
+The area below the red curve is the same in the intervals (−∞,Q1), (Q1,Q2), (Q2,Q3), and (Q3,+∞).
+
+In statistics and probability, quantiles are cut points dividing the range of a probability distribution into continuous intervals with equal probabilities, or dividing the observations in a sample in the same way. There is one fewer quantile than the number of groups created. Common quantiles have special names, such as quartiles (four groups), deciles (ten groups), and percentiles (100 groups). The groups created are termed halves, thirds, quarters, etc., though sometimes the terms for the quantile are used for the groups created, rather than for the cut points.
+
+
+
 
 # Aggregate:: double iqr(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **interquartile range (IQR)** of the column’s numeric values. It uses the 25th percentile $(\(Q_1\))$ and the 75th percentile $(\(Q_3\))$:
+
+![image](https://github.com/user-attachments/assets/ea2dc610-80ea-401b-9357-595ff8371d27)
+
+In descriptive statistics, the interquartile range (IQR) is a measure of statistical dispersion, which is the spread of the data.[1] The IQR may also be called the midspread, middle 50%, fourth spread, or H‑spread. It is defined as the difference between the 75th and 25th percentiles of the data.[2][3][4] To calculate the IQR, the data set is divided into quartiles, or four rank-ordered even parts via linear interpolation.[1] These quartiles are denoted by Q1 (also called the lower quartile), Q2 (the median), and Q3 (also called the upper quartile). The lower quartile corresponds with the 25th percentile and the upper quartile corresponds with the 75th percentile, so IQR = Q3 −  Q1[1].
+
+The IQR is an example of a trimmed estimator, defined as the 25% trimmed range, which enhances the accuracy of dataset statistics by dropping lower contribution, outlying points.[5] It is also used as a robust measure of scale[5] It can be clearly visualized by the box on a box plot.[1]
+
+
+# $\displaystyle \text{IQR} = Q_{3} - Q_{1}$
+
+where $\(Q_{1} = \text{quantile}(0.25)\)$ and $\(Q_{3} = \text{quantile}(0.75)\)$. The values are typically found via interpolation after sorting.
+
 # Aggregate:: double nullCount(const DataFrame* df, size_t colIndex)
+If a column has $\(n\)$ rows, we define an “is-null” indicator $\(\mathbf{I}(\cdot)\)$ that is 1 if reading row $\(r\)$ fails, and 0 otherwise. The **null count** is:
+
+# $\[\sum_{r=0}^{n-1} \mathbf{I}\bigl(\text{read fails at row } r\bigr).\]$
+
+Thus, each time seriesGetXxx(...) returns false, we interpret that row as null and increment by 1.
 
 # Aggregate:: double uniqueCount(const DataFrame* df, size_t colIndex)
+The unique count aggregator's goal is to count the number of distinct values in a specified column
+
+Why the O(n²) Approach?
+This naive check is simple to implement, iterating pairs of elements. For each new element, we see if it already exists among previously encountered elements.
+In a production environment, we might use a hash set or sort the array and do a single pass to find distinct elements in O(n log n). But here, the naive approach is straightforward.
+
+# $\displaystyle \sum_{r=0}^{n-1} \mathbf{I}\!\Bigl( x_r \not\in \{x_0,\dots,x_{r-1}\}\Bigr)$
 
 # Aggregate::double product(const DataFrame* df, size_t colIndex)
+The product aggregator multiplies all valid numeric values in a specified column, returning the cumulative product as a double
+
+# $\displaystyle \prod_{r=0}^{n-1} x_r$
 
 # Aggregate::double nthLargest(const DataFrame* df, size_t colIndex, size_t n)
+Given a DataFrame `df`, a column index `colIndex`, and an integer `n`, the function returns the **n-th largest** value in the column’s numeric data. If the column has $\(N\)$ valid entries $\(x_0, x_1, \dots, x_{N-1}\)$, we first **sort** them in **descending** order:
 
+# $y_0 \ge y_1 \ge\dots\ge y_{N-1}$
+
+where each $\(y_i\)$ is one of the $\(x_r\)$. Then the **n-th largest** is:
+
+# $\displaystyle y_{\,(n-1)}$
+
+i.e., **the $\((n-1)\)$-th index** in the sorted (descending) array. If $\(n\)$ exceeds $\(N\)$ or no values are valid, a fallback value (e.g., 0.0) is returned.
 # Aggregate::double nthSmallest(const DataFrame* df, size_t colIndex, size_t n)
 
+Given a DataFrame `df`, a column index `colIndex`, and an integer `n`, the function returns the **n-th smallest** value in the column’s numeric data. If the column has $\(N\)$ valid entries $\(x_0, x_1, \dots, x_{N-1}\)$, we first **sort** them in **ascending** order:
+
+# $y_0 \le y_1 \le\dots\le y_{N-1}$
+
+where each $\(y_i\)$ is one of the $\(x_r\)$. Then the **n-th smallest** is:
+
+# $\displaystyle y_{\,(n-1)}$
+
+i.e., **the $\((n-1)\)$-th index** in the sorted (ascending) array. If $\(n\)$ exceeds $\(N\)$ or no values are valid, a fallback value (e.g., 0.0) is returned.
+
+
 # Aggregate::double skewness(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **sample skewness** of the column’s numeric values. 
+
+Consider the two distributions in the figure just below. Within each graph, the values on the right side of the distribution taper differently from the values on the left side. These tapering sides are called tails, and they provide a visual means to determine which of the two kinds of skewness a distribution has:
+
+- negative skew: The left tail is longer; the mass of the distribution is concentrated on the right of the figure. The distribution is said to be left-skewed, left-tailed, or skewed to the left, despite the fact that the curve itself appears to be skewed or leaning to the right; left instead refers to the left tail being drawn out and, often, the mean being skewed to the left of a typical center of the data. A left-skewed distribution usually appears as a right-leaning curve.
+- positive skew: The right tail is longer; the mass of the distribution is concentrated on the left of the figure. The distribution is said to be right-skewed, right-tailed, or skewed to the right, despite the fact that the curve itself appears to be skewed or leaning to the left; right instead refers to the right tail being drawn out and, often, the mean being skewed to the right of a typical center of the data. A right-skewed distribution usually appears as a left-leaning curve. https://en.wikipedia.org/wiki/Skewness
+  
+![image](https://github.com/user-attachments/assets/41d110a0-5465-4e47-b229-0bab92605fcb)
+
+![image](https://github.com/user-attachments/assets/e700653c-b96a-487b-b2a5-6b2e7daf78b1)
+
+where μ is the mean, σ is the standard deviation, E is the expectation operator, μ3 is the third central moment, and κt are the t-th cumulants. It is sometimes referred to as Pearson's moment coefficient of skewness,[5] or simply the moment coefficient of skewness,[4] but should not be confused with Pearson's other skewness statistics
+
+
 
 # Aggregate::double kurtosis(const DataFrame* df, size_t colIndex)
 
