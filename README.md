@@ -1091,7 +1091,14 @@ Given a DataFrame `df` and a column index `colIndex`, the **valueCounts** functi
 
 # Aggregate::DataFrame cumulativeSum(const DataFrame* df, size_t colIndex)
 
+It creates a new column that, for each row, holds the running total (sum) of all previous rows (including the current row).
+
+![cumSum](diagrams/cumSum.png "cumSum")
+
+
 # Aggregate::DataFrame cumulativeProduct(const DataFrame* df, size_t colIndex)
+For each row in a numeric column, cumulative product stores the running product of all previous values (including the current one)
+![cumProduct](diagrams/cumProduct.png "cumProduct")
 
 # Aggregate::DataFrame cumulativeMax(const DataFrame* df, size_t colIndex)
 
