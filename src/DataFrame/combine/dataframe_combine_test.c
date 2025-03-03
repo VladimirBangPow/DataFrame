@@ -615,6 +615,79 @@ static void testAntiJoin(void)
     printf(" - dfAntiJoin_impl test passed.\n");
 }
 
+static void testCrossJoin(void)
+{
+    printf("Testing dfCrossJoin_impl...\n");
+
+    // 1) Create a "left" DataFrame with 1 column => "L" = [1,2]
+    DataFrame left;
+    DataFrame_Create(&left);
+
+    int leftVals[] = {1,2};
+    Series sLeft;
+    seriesInit(&sLeft, "L", DF_INT);
+    seriesAddInt(&sLeft, leftVals[0]);
+    seriesAddInt(&sLeft, leftVals[1]);
+    left.addSeries(&left, &sLeft);
+    seriesFree(&sLeft);
+
+    // 2) Create a "right" DataFrame with 1 column => "R" = [10,20,30]
+    DataFrame right;
+    DataFrame_Create(&right);
+
+    int rightVals[] = {10,20,30};
+    Series sRight;
+    seriesInit(&sRight, "R", DF_INT);
+    for (int i = 0; i < 3; i++) {
+        seriesAddInt(&sRight, rightVals[i]);
+    }
+    right.addSeries(&right, &sRight);
+    seriesFree(&sRight);
+
+    // 3) Call crossJoin => expect (2 * 3) = 6 rows
+    DataFrame cross = left.crossJoin(&left, &right);
+    // We expect 2 columns => "L" and "R"
+    assert(cross.numColumns(&cross) == 2);
+
+    // Should produce 6 rows
+    size_t nRows = cross.numRows(&cross);
+    assert(nRows == 6);
+
+    // 4) Retrieve the Series => "L" is col0, "R" is col1
+    const Series* colL = cross.getSeries(&cross, 0);
+    const Series* colR = cross.getSeries(&cross, 1);
+    assert(strcmp(colL->name, "L") == 0);
+    assert(strcmp(colR->name, "R") == 0);
+
+    // 5) Check the values row-by-row
+    // Typically, cross join goes in row-major order:
+    //   left row0 => 1 joined with right row0 => 10
+    //   left row0 => 1 joined with right row1 => 20
+    //   left row0 => 1 joined with right row2 => 30
+    //   left row1 => 2 joined with right row0 => 10
+    //   left row1 => 2 joined with right row1 => 20
+    //   left row1 => 2 joined with right row2 => 30
+    // So we expect (L,R): 
+    //   (1,10), (1,20), (1,30), (2,10), (2,20), (2,30)
+
+    int expectL[6] = {1,1,1,2,2,2};
+    int expectR[6] = {10,20,30,10,20,30};
+
+    for (size_t i = 0; i < 6; i++) {
+        int lv, rv;
+        bool gotL = seriesGetInt(colL, i, &lv);
+        bool gotR = seriesGetInt(colR, i, &rv);
+        assert(gotL && gotR);
+        assert(lv == expectL[i]);
+        assert(rv == expectR[i]);
+    }
+
+    DataFrame_Destroy(&cross);
+    DataFrame_Destroy(&left);
+    DataFrame_Destroy(&right);
+
+    printf(" - dfCrossJoin_impl test passed.\n");
+}
 
 // ------------------------------------------------------------------
 // Main test driver for combine: concat, merge, join, + new functions
@@ -632,6 +705,6 @@ void testCombine(void)
     testDifference();
     testSemiJoin();
     testAntiJoin();
-
+    testCrossJoin();
     printf("All DataFrame combine tests passed successfully!\n");
 }
