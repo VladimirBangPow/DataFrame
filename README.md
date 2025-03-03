@@ -895,15 +895,23 @@ Given a DataFrame `df` and a column index `colIndex`, the function returns the *
 
 Given a DataFrame `df` and a column index `colIndex`, the function returns the **median** of the column’s numeric values by sorting them. 
 
+![image](https://github.com/user-attachments/assets/6683f5b1-a608-48da-9752-ec248aaf5f0d)
+
+The median of a set of numbers is the value separating the higher half from the lower half of a data sample, a population, or a probability distribution. For a data set, it may be thought of as the “middle" value.
+
 
 
 # Aggregate::double mode(const DataFrame* df, size_t colIndex)
-Given a DataFrame `df` and a column index `colIndex`, the function returns the **mode** of the column’s numeric values by sorting them. 
 
+Given a DataFrame `df` and a column index `colIndex`, the function returns the **mode** of the column’s numeric values by sorting them. 
+![image](https://github.com/user-attachments/assets/697f6b7b-863f-4016-a5b7-efbc3dea9083)
+
+In statistics, the mode is the value that appears most often in a set of data values.[1] If X is a discrete random variable, the mode is the value x at which the probability mass function takes its maximum value (i.e., x=argmaxxi P(X = xi)). In other words, it is the value that is most likely to be sampled.
 
 
 # Aggregate::double std(const DataFrame* df, size_t colIndex)
 Given a DataFrame `df` and a column index `colIndex`, the function returns the **standard deviation** of the column’s numeric values. The **sample** standard deviation is:
+![image](https://github.com/user-attachments/assets/5a3c7690-c894-467c-96f3-6ffd11390391)
 
 # $\sigma={\sqrt {\frac {\sum(x_{i}-{\mu})^{2}}{N}}}$
 - $\sigma$	=	population standard deviation
@@ -913,6 +921,9 @@ Given a DataFrame `df` and a column index `colIndex`, the function returns the *
 
 # Aggregate:: double var(const DataFrame* df, size_t colIndex)
 Given a DataFrame `df` and a column index `colIndex`, the function returns the **variance** of the column’s numeric values.
+
+![image](https://github.com/user-attachments/assets/777f8349-3dc9-4a2f-bb35-7538439d0e9e)
+
 
 # $S^2 = \frac{\sum (x_i - \bar{x})^2}{n - 1}$
 - $S^2$	=	sample variance
@@ -1016,13 +1027,67 @@ where μ is the mean, σ is the standard deviation, E is the expectation operato
 
 # Aggregate::double kurtosis(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function computes the **kurtosis** of the columns numeric values.
+
+![image](https://github.com/user-attachments/assets/8c094786-c2ab-45fa-afad-9ea59f5c66cc)
+
+In probability theory and statistics, kurtosis (from Greek: κυρτός, kyrtos or kurtos, meaning "curved, arching") refers to the degree of “tailedness” in the probability distribution of a real-valued random variable. Similar to skewness, kurtosis provides insight into specific characteristics of a distribution. Various methods exist for quantifying kurtosis in theoretical distributions, and corresponding techniques allow estimation based on sample data from a population. It’s important to note that different measures of kurtosis can yield varying interpretations.
+
+The standard measure of a distribution's kurtosis, originating with Karl Pearson,[1] is a scaled version of the fourth moment of the distribution. This number is related to the tails of the distribution, not its peak;[2] hence, the sometimes-seen characterization of kurtosis as "peakedness" is incorrect. For this measure, higher kurtosis corresponds to greater extremity of deviations (or outliers), and not the configuration of data near the mean.
+
+The kurtosis is the fourth standardized moment, defined as:
+![image](https://github.com/user-attachments/assets/c01d9ad4-bc70-49e8-a577-5992d4f96fc9)
+
+
 # Aggregate::double covariance(const DataFrame* df, size_t colIndex1, size_t colIndex2)
+
+Given a DataFrame `df` and two column indices (`colIndex1` and `colIndex2`), the function computes the **sample covariance** between the numeric values in these two columns.
+
+![image](https://github.com/user-attachments/assets/4992c491-dd4c-4aaa-93af-2da86909cd5d)
+
+![image](https://github.com/user-attachments/assets/90f43f70-7681-4974-bf28-627e6db90644)
+
+
+- $cov_{x,y}$	=	covariance between variable x and y
+- $x_{i}$	=	data value of x
+- $y_{i}$	=	data value of y
+- $\bar{x}$	=	mean of x
+- $\bar{y}$	=	mean of y
+- $N$	=	number of data values
+
 
 # Aggregate::double correlation(const DataFrame* df, size_t colIndexX, size_t colIndexY)
 
+Given a DataFrame `df` and two column indices (`colIndexX`, `colIndexY`), the function computes the **Pearson correlation** between those columns’ numeric values.
+
+![image](https://github.com/user-attachments/assets/e5134239-299c-4e6e-8931-abf2736eb224)
+
+In statistics, the Pearson correlation coefficient (PCC)[a] is a correlation coefficient that measures linear correlation between two sets of data. It is the ratio between the covariance of two variables and the product of their standard deviations; thus, it is essentially a normalized measurement of the covariance, such that the result always has a value between −1 and 1. As with covariance itself, the measure can only reflect a linear correlation of variables, and ignores many other types of relationships or correlations.
+
+![image](https://github.com/user-attachments/assets/d8a5b131-6929-4d92-88ab-9e3589b255f7)
+
+
+- $r$	=	correlation coefficient
+- $x_{i}$	=	values of the x-variable in a sample
+- $\bar{x}$	=	mean of the values of the x-variable
+- $y_{i}$	=	values of the y-variable in a sample
+- $\bar{y}$	=	mean of the values of the y-variable
+
+
+
 # Aggregate::DataFrame uniqueValues(const DataFrame* df, size_t colIndex)
 
+Given a DataFrame `df` and a column index `colIndex`, the function **creates a new DataFrame** containing only the **distinct values** from that column.
+![uniqueValues](diagrams/uniqueValues.png "uniqueValues")
+
+
+
 # Aggregate::DataFrame valueCounts(const DataFrame* df, size_t colIndex)
+
+Given a DataFrame `df` and a column index `colIndex`, the **valueCounts** function returns a new DataFrame listing each **distinct value** in that column along with its **frequency**.
+
+![valueCounts](diagrams/valueCounts.png "valueCounts")
+
 
 # Aggregate::DataFrame cumulativeSum(const DataFrame* df, size_t colIndex)
 
