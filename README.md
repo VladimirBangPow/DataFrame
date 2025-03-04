@@ -1568,6 +1568,8 @@ In statistics, the Pearson correlation coefficient (PCC)[a] is a correlation coe
 
 
 ## Usage:
+
+
 ```c
     DataFrame df;
     DataFrame_Create(&df);
@@ -1859,6 +1861,9 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 # Combine::DataFrame concat(const DataFrame* top, const DataFrame* bottom)
 
+![concat](diagrams/concat.png "concat")
+
+
 ## Usage
 ```c
     // Build top DataFrame: 2 columns => col1(int), col2(string), 3 rows
@@ -1931,6 +1936,10 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Combine::DataFrame merge(const DataFrame* left, const DataFrame* right, const char* leftKeyName, const char* rightKeyName)
+
+![merge](diagrams/merge.png "merge")
+
+
 ## Usage
 ```c
     // We'll create left DF with columns: "Key"(int), "A"(int)
@@ -2013,6 +2022,8 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame join(const DataFrame* left, const DataFrame* right, const char* leftKeyName, const char* rightKeyName, JoinType how)
+![join](diagrams/join.png "join")
+
 ## Usage
 ```c
     // We'll reuse a scenario similar to testMerge, but add a twist
@@ -2182,6 +2193,8 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame unionDF(const DataFrame* dfA, const DataFrame* dfB)
+![union](diagrams/union.png "union")
+
 ## Usage
 ```c
     // We'll create 2 DataFrames with 1 column => "Val" (int).
@@ -2228,6 +2241,8 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame intersectionDF(const DataFrame* dfA, const DataFrame* dfB)
+![intersection](diagrams/intersection.png "intersection")
+
 ## Usage
 ```c
     // dfA => [2,2,3,4]
@@ -2273,6 +2288,8 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame differenceDF(const DataFrame* dfA, const DataFrame* dfB)
+![difference](diagrams/difference.png "difference")
+
 ## Usage
 ```c
     // dfA => [1,2,3]
@@ -2316,6 +2333,8 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame semiJoin(const DataFrame* left, const DataFrame* right, const char* leftKey, const char* rightKey)
+![semiJoin](diagrams/semiJoin.png "semiJoin")
+
 ## Usage
 ```c
     // left => Key=[1,2,3], left => colX=[10,20,30]
@@ -2368,6 +2387,8 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame antiJoin(const DataFrame* left, const DataFrame* right, const char* leftKey, const char* rightKey)
+![antiJoin](diagrams/antiJoin.png "antiJoin")
+
 ## Usage
 ```c
     // left => Key=[1,2,3], colX=[10,20,30]
@@ -2423,6 +2444,8 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame crossJoin(const DataFrame* left, const DataFrame* right)
+![crossJoin](diagrams/crossJoin.png "crossJoin")
+
 ## Usage
 ```c
     // 1) Create a "left" DataFrame with 1 column => "L" = [1,2]
