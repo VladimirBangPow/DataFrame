@@ -2333,7 +2333,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Combine::DataFrame semiJoin(const DataFrame* left, const DataFrame* right, const char* leftKey, const char* rightKey)
-![semiJoin](diagrams/semiJoin.png "semiJoin")
+![semiJoin](diagrams/semiJoin2.png "semiJoin")
 
 ## Usage
 ```c
