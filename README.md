@@ -2965,7 +2965,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 
-# Indexing::DataFrame columns(const DataFrame* df)
+# Indexing::DataFrame cols(const DataFrame* df)
 ![columns](diagrams/columns.png "columns")
 ## Usage:
 ```c
