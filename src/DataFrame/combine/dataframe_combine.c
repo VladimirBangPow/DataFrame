@@ -137,86 +137,138 @@ DataFrame dfMerge_impl(const DataFrame* left,
                        const char* leftKeyName,
                        const char* rightKeyName)
 {
+    // 1) Create an empty result DataFrame.
     DataFrame result;
     DataFrame_Create(&result);
+
+    // Basic validation: need valid pointers and key names.
     if (!left || !right || !leftKeyName || !rightKeyName) {
         return result;
     }
 
-    // find leftKeyIndex, rightKeyIndex
-    size_t leftCols = left->numColumns(left);
-    size_t rightCols= right->numColumns(right);
-    size_t leftKeyIndex=(size_t)-1, rightKeyIndex=(size_t)-1;
+    // 2) Find the key-column indexes in the left and right DataFrames.
+    size_t leftCols  = left->numColumns(left);
+    size_t rightCols = right->numColumns(right);
 
-    for (size_t c=0; c<leftCols; c++) {
+    size_t leftKeyIndex  = (size_t)-1;
+    size_t rightKeyIndex = (size_t)-1;
+
+    for (size_t c = 0; c < leftCols; c++) {
         const Series* s = left->getSeries(left, c);
-        if (s && strcmp(s->name, leftKeyName)==0) {
+        if (s && strcmp(s->name, leftKeyName) == 0) {
             leftKeyIndex = c; 
             break;
         }
     }
-    for (size_t c=0; c<rightCols; c++) {
+    for (size_t c = 0; c < rightCols; c++) {
         const Series* s = right->getSeries(right, c);
-        if (s && strcmp(s->name, rightKeyName)==0) {
+        if (s && strcmp(s->name, rightKeyName) == 0) {
             rightKeyIndex = c; 
             break;
         }
     }
-    if (leftKeyIndex==(size_t)-1 || rightKeyIndex==(size_t)-1) {
+
+    if (leftKeyIndex == (size_t)-1 || rightKeyIndex == (size_t)-1) {
         fprintf(stderr,"dfMerge: key not found.\n");
         return result;
     }
 
-    const Series* leftKeySeries = left->getSeries(left, leftKeyIndex);
-    const Series* rightKeySeries= right->getSeries(right, rightKeyIndex);
+    // 3) Check that the key columns have the same type.
+    const Series* leftKeySeries  = left->getSeries(left, leftKeyIndex);
+    const Series* rightKeySeries = right->getSeries(right, rightKeyIndex);
+    if (!leftKeySeries || !rightKeySeries) {
+        fprintf(stderr,"dfMerge: invalid key series.\n");
+        return result;
+    }
     if (leftKeySeries->type != rightKeySeries->type) {
         fprintf(stderr,"dfMerge: key type mismatch.\n");
         return result;
     }
 
-    // Build “result columns”: all from left + all from right except key
+    // 4) The result will have all columns from 'left' plus all columns
+    //    from 'right' except the right key column.
+    //    So total columns = leftCols + (rightCols - 1).
     size_t totalCols = leftCols + (rightCols - 1);
     Series* resultSeries = (Series*)calloc(totalCols, sizeof(Series));
+    if (!resultSeries) {
+        fprintf(stderr,"dfMerge: out of memory.\n");
+        return result; 
+    }
 
-    // init left columns in [0..leftCols-1]
-    for (size_t c=0; c<leftCols; c++) {
+    // 5) Initialize result columns for the left columns [0..leftCols-1].
+    for (size_t c = 0; c < leftCols; c++) {
         const Series* sL = left->getSeries(left, c);
         seriesInit(&resultSeries[c], sL->name, sL->type);
     }
-    // init right columns skipping key
+
+    // 6) Initialize result columns for the right columns (skipping the rightKey).
+    //    If a right column name conflicts with any left column name, we rename it "name_right".
     size_t rOffset = leftCols;
-    for (size_t c=0; c<rightCols; c++) {
-        if (c == rightKeyIndex) continue;
-        const Series* sR= right->getSeries(right, c);
-        seriesInit(&resultSeries[rOffset], sR->name, sR->type);
+    for (size_t c = 0; c < rightCols; c++) {
+        if (c == rightKeyIndex) {
+            // skip the key column in the right DataFrame
+            continue;
+        }
+
+        const Series* sR = right->getSeries(right, c);
+        if (!sR) {
+            continue;
+        }
+
+        // Check if sR->name conflicts with any name in left
+        bool conflict = false;
+        for (size_t lc = 0; lc < leftCols; lc++) {
+            const Series* leftCol = left->getSeries(left, lc);
+            if (strcmp(sR->name, leftCol->name) == 0) {
+                conflict = true;
+                break;
+            }
+        }
+
+        char newName[128];
+        if (!conflict) {
+            // No conflict => keep original name
+            snprintf(newName, sizeof(newName), "%s", sR->name);
+        } else {
+            // Conflict => rename => "xxx_right"
+            snprintf(newName, sizeof(newName), "%s_right", sR->name);
+        }
+
+        // Initialize the column
+        seriesInit(&resultSeries[rOffset], newName, sR->type);
         rOffset++;
     }
 
+    // 7) Merge rows for an "inner" join: for each row in 'left', find matching row(s) in 'right'.
     size_t leftRows  = left->numRows(left);
     size_t rightRows = right->numRows(right);
 
-    // For each row in left => find matching in right => combine
-    for (size_t lr=0; lr < leftRows; lr++) {
-        // Based on the key type
-        switch (leftKeySeries->type) {
-            case DF_INT: {
-                int lv; 
-                if (!seriesGetInt(leftKeySeries, lr, &lv)) continue;
+    for (size_t lr = 0; lr < leftRows; lr++) {
 
-                // search right
-                for (size_t rr=0; rr < rightRows; rr++) {
-                    int rv; 
-                    if (!seriesGetInt(rightKeySeries, rr, &rv)) continue;
+        switch (leftKeySeries->type) {
+
+            case DF_INT: {
+                int lv;
+                if (!seriesGetInt(leftKeySeries, lr, &lv)) {
+                    // If we cannot read the key, skip
+                    break;
+                }
+                // For each row in 'right', look for matches
+                for (size_t rr = 0; rr < rightRows; rr++) {
+                    int rv;
+                    if (!seriesGetInt(rightKeySeries, rr, &rv)) {
+                        continue;
+                    }
                     if (lv == rv) {
-                        // match => combine
-                        // 1) copy left row
-                        for (size_t c=0; c<leftCols; c++) {
-                            const Series* sL= left->getSeries(left, c);
-                            switch(sL->type) {
+                        // Found a match => combine the row
+                        // (1) copy left row into [0..leftCols-1]
+                        for (size_t c = 0; c < leftCols; c++) {
+                            const Series* sL = left->getSeries(left, c);
+                            switch (sL->type) {
                                 case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sL, lr, &v)) {
-                                        seriesAddInt(&resultSeries[c], v);
+                                    int tmp;
+                                    if (seriesGetInt(sL, lr, &tmp)) {
+                                        seriesAddInt(&resultSeries[c], tmp);
                                     }
                                 } break;
                                 case DF_DOUBLE: {
@@ -226,13 +278,96 @@ DataFrame dfMerge_impl(const DataFrame* left,
                                     }
                                 } break;
                                 case DF_STRING: {
-                                    char* st=NULL;
+                                    char* st = NULL;
                                     if (seriesGetString(sL, lr, &st)) {
                                         seriesAddString(&resultSeries[c], st);
                                         free(st);
                                     }
                                 } break;
-                                /* NEW: DF_DATETIME */
+                                case DF_DATETIME: {
+                                    long long dtVal;
+                                    if (seriesGetDateTime(sL, lr, &dtVal)) {
+                                        seriesAddDateTime(&resultSeries[c], dtVal);
+                                    }
+                                } break;
+                            }
+                        }
+                        // (2) copy right row except rightKey => fill [leftCols..end]
+                        size_t ro = leftCols;
+                        for (size_t rc = 0; rc < rightCols; rc++) {
+                            if (rc == rightKeyIndex) {
+                                continue; 
+                            }
+                            const Series* sR = right->getSeries(right, rc);
+                            switch (sR->type) {
+                                case DF_INT: {
+                                    int tmp;
+                                    if (seriesGetInt(sR, rr, &tmp)) {
+                                        seriesAddInt(&resultSeries[ro], tmp);
+                                    }
+                                } break;
+                                case DF_DOUBLE: {
+                                    double d;
+                                    if (seriesGetDouble(sR, rr, &d)) {
+                                        seriesAddDouble(&resultSeries[ro], d);
+                                    }
+                                } break;
+                                case DF_STRING: {
+                                    char* st = NULL;
+                                    if (seriesGetString(sR, rr, &st)) {
+                                        seriesAddString(&resultSeries[ro], st);
+                                        free(st);
+                                    }
+                                } break;
+                                case DF_DATETIME: {
+                                    long long dtVal;
+                                    if (seriesGetDateTime(sR, rr, &dtVal)) {
+                                        seriesAddDateTime(&resultSeries[ro], dtVal);
+                                    }
+                                } break;
+                            }
+                            ro++;
+                        }
+                    }
+                }
+            } break; // end DF_INT
+
+            case DF_DOUBLE: {
+                double lv;
+                if (!seriesGetDouble(leftKeySeries, lr, &lv)) {
+                    break;
+                }
+                // match with right
+                for (size_t rr = 0; rr < rightRows; rr++) {
+                    double rv;
+                    if (!seriesGetDouble(rightKeySeries, rr, &rv)) {
+                        continue;
+                    }
+                    if (lv == rv) {
+                        // match => combine
+                        // 1) copy left row into [0..leftCols-1]
+                        for (size_t c = 0; c < leftCols; c++) {
+                            const Series* sL = left->getSeries(left, c);
+                            switch (sL->type) {
+                                case DF_INT: {
+                                    int tmp;
+                                    if (seriesGetInt(sL, lr, &tmp)) {
+                                        seriesAddInt(&resultSeries[c], tmp);
+                                    }
+                                } break;
+                                case DF_DOUBLE: {
+                                    double d;
+                                    if (seriesGetDouble(sL, lr, &d)) {
+                                        seriesAddDouble(&resultSeries[c], d);
+                                    }
+                                } break;
+                                case DF_STRING: {
+                                    char* st = NULL;
+                                    if (seriesGetString(sL, lr, &st)) {
+                                        seriesAddString(&resultSeries[c], st);
+                                        free(st);
+                                    }
+                                } break;
                                 case DF_DATETIME: {
                                     long long dtVal;
                                     if (seriesGetDateTime(sL, lr, &dtVal)) {
@@ -242,15 +377,17 @@ DataFrame dfMerge_impl(const DataFrame* left,
                             }
                         }
                         // 2) copy right row except key
-                        size_t ro= leftCols;
-                        for (size_t rc=0; rc<rightCols; rc++) {
-                            if (rc == rightKeyIndex) continue;
-                            const Series* sR= right->getSeries(right, rc);
-                            switch(sR->type) {
+                        size_t ro = leftCols;
+                        for (size_t rc = 0; rc < rightCols; rc++) {
+                            if (rc == rightKeyIndex) {
+                                continue;
+                            }
+                            const Series* sR = right->getSeries(right, rc);
+                            switch (sR->type) {
                                 case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sR, rr, &v)) {
-                                        seriesAddInt(&resultSeries[ro], v);
+                                    int tmp;
+                                    if (seriesGetInt(sR, rr, &tmp)) {
+                                        seriesAddInt(&resultSeries[ro], tmp);
                                     }
                                 } break;
                                 case DF_DOUBLE: {
@@ -260,85 +397,7 @@ DataFrame dfMerge_impl(const DataFrame* left,
                                     }
                                 } break;
                                 case DF_STRING: {
-                                    char* st=NULL;
-                                    if (seriesGetString(sR, rr, &st)) {
-                                        seriesAddString(&resultSeries[ro], st);
-                                        free(st);
-                                    }
-                                } break;
-                                /* NEW: DF_DATETIME */
-                                case DF_DATETIME: {
-                                    long long dtVal;
-                                    if (seriesGetDateTime(sR, rr, &dtVal)) {
-                                        seriesAddDateTime(&resultSeries[ro], dtVal);
-                                    }
-                                } break;
-                            }
-                            ro++;
-                        }
-                    }
-                }
-            } break;
-
-            case DF_DOUBLE: {
-                double lv;
-                if (!seriesGetDouble(leftKeySeries, lr, &lv)) continue;
-                for (size_t rr=0; rr < rightRows; rr++) {
-                    double rv;
-                    if (!seriesGetDouble(rightKeySeries, rr, &rv)) continue;
-                    if (lv == rv) {
-                        // match => combine
-                        // copy left row, then right row except key
-                        // same approach, including DF_DATETIME
-                        for (size_t c=0; c<leftCols; c++) {
-                            const Series* sL= left->getSeries(left, c);
-                            switch(sL->type) {
-                                case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sL, lr, &v)) {
-                                        seriesAddInt(&resultSeries[c], v);
-                                    }
-                                } break;
-                                case DF_DOUBLE: {
-                                    double d;
-                                    if (seriesGetDouble(sL, lr, &d)) {
-                                        seriesAddDouble(&resultSeries[c], d);
-                                    }
-                                } break;
-                                case DF_STRING: {
-                                    char* st=NULL;
-                                    if (seriesGetString(sL, lr, &st)) {
-                                        seriesAddString(&resultSeries[c], st);
-                                        free(st);
-                                    }
-                                } break;
-                                case DF_DATETIME: {
-                                    long long dtVal;
-                                    if (seriesGetDateTime(sL, lr, &dtVal)) {
-                                        seriesAddDateTime(&resultSeries[c], dtVal);
-                                    }
-                                } break;
-                            }
-                        }
-                        size_t ro= leftCols;
-                        for (size_t rc=0; rc<rightCols; rc++) {
-                            if (rc == rightKeyIndex) continue;
-                            const Series* sR= right->getSeries(right, rc);
-                            switch(sR->type) {
-                                case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sR, rr, &v)) {
-                                        seriesAddInt(&resultSeries[ro], v);
-                                    }
-                                } break;
-                                case DF_DOUBLE: {
-                                    double d;
-                                    if (seriesGetDouble(sR, rr, &d)) {
-                                        seriesAddDouble(&resultSeries[ro], d);
-                                    }
-                                } break;
-                                case DF_STRING: {
-                                    char* st=NULL;
+                                    char* st = NULL;
                                     if (seriesGetString(sR, rr, &st)) {
                                         seriesAddString(&resultSeries[ro], st);
                                         free(st);
@@ -355,24 +414,28 @@ DataFrame dfMerge_impl(const DataFrame* left,
                         }
                     }
                 }
-            } break;
+            } break; // end DF_DOUBLE
 
             case DF_STRING: {
                 char* lv = NULL;
-                if (!seriesGetString(leftKeySeries, lr, &lv)) continue;
-                for (size_t rr=0; rr < rightRows; rr++) {
+                if (!seriesGetString(leftKeySeries, lr, &lv)) {
+                    break;
+                }
+                for (size_t rr = 0; rr < rightRows; rr++) {
                     char* rv = NULL;
-                    if (!seriesGetString(rightKeySeries, rr, &rv)) continue;
-                    if (strcmp(lv, rv)==0) {
+                    if (!seriesGetString(rightKeySeries, rr, &rv)) {
+                        continue;
+                    }
+                    if (strcmp(lv, rv) == 0) {
                         // match => combine
-                        // copy left row + right row except key
-                        for (size_t c=0; c<leftCols; c++) {
-                            const Series* sL= left->getSeries(left, c);
-                            switch(sL->type) {
+                        // copy left row
+                        for (size_t c = 0; c < leftCols; c++) {
+                            const Series* sL = left->getSeries(left, c);
+                            switch (sL->type) {
                                 case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sL, lr, &v)) {
-                                        seriesAddInt(&resultSeries[c], v);
+                                    int tmp;
+                                    if (seriesGetInt(sL, lr, &tmp)) {
+                                        seriesAddInt(&resultSeries[c], tmp);
                                     }
                                 } break;
                                 case DF_DOUBLE: {
@@ -382,7 +445,7 @@ DataFrame dfMerge_impl(const DataFrame* left,
                                     }
                                 } break;
                                 case DF_STRING: {
-                                    char* st2=NULL;
+                                    char* st2 = NULL;
                                     if (seriesGetString(sL, lr, &st2)) {
                                         seriesAddString(&resultSeries[c], st2);
                                         free(st2);
@@ -396,15 +459,18 @@ DataFrame dfMerge_impl(const DataFrame* left,
                                 } break;
                             }
                         }
-                        size_t ro= leftCols;
-                        for (size_t rc=0; rc<rightCols; rc++) {
-                            if (rc == rightKeyIndex) continue;
-                            const Series* sR= right->getSeries(right, rc);
-                            switch(sR->type) {
+                        // copy right row except key
+                        size_t ro = leftCols;
+                        for (size_t rc = 0; rc < rightCols; rc++) {
+                            if (rc == rightKeyIndex) {
+                                continue;
+                            }
+                            const Series* sR = right->getSeries(right, rc);
+                            switch (sR->type) {
                                 case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sR, rr, &v)) {
-                                        seriesAddInt(&resultSeries[ro], v);
+                                    int tmp;
+                                    if (seriesGetInt(sR, rr, &tmp)) {
+                                        seriesAddInt(&resultSeries[ro], tmp);
                                     }
                                 } break;
                                 case DF_DOUBLE: {
@@ -414,7 +480,7 @@ DataFrame dfMerge_impl(const DataFrame* left,
                                     }
                                 } break;
                                 case DF_STRING: {
-                                    char* st2=NULL;
+                                    char* st2 = NULL;
                                     if (seriesGetString(sR, rr, &st2)) {
                                         seriesAddString(&resultSeries[ro], st2);
                                         free(st2);
@@ -430,28 +496,31 @@ DataFrame dfMerge_impl(const DataFrame* left,
                             ro++;
                         }
                     }
-                    free(rv);
+                    if (rv) free(rv);
                 }
-                free(lv);
-            } break;
+                if (lv) free(lv);
+            } break; // end DF_STRING
 
-            /* NEW: DF_DATETIME => match 64-bit values. */
             case DF_DATETIME: {
                 long long lv;
-                if (!seriesGetDateTime(leftKeySeries, lr, &lv)) continue;
-                for (size_t rr=0; rr < rightRows; rr++) {
+                if (!seriesGetDateTime(leftKeySeries, lr, &lv)) {
+                    break;
+                }
+                for (size_t rr = 0; rr < rightRows; rr++) {
                     long long rv;
-                    if (!seriesGetDateTime(rightKeySeries, rr, &rv)) continue;
+                    if (!seriesGetDateTime(rightKeySeries, rr, &rv)) {
+                        continue;
+                    }
                     if (lv == rv) {
                         // match => combine
-                        // copy left row + right row except key
-                        for (size_t c=0; c<leftCols; c++) {
-                            const Series* sL= left->getSeries(left, c);
-                            switch(sL->type) {
+                        // copy left row
+                        for (size_t c = 0; c < leftCols; c++) {
+                            const Series* sL = left->getSeries(left, c);
+                            switch (sL->type) {
                                 case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sL, lr, &v)) {
-                                        seriesAddInt(&resultSeries[c], v);
+                                    int tmp;
+                                    if (seriesGetInt(sL, lr, &tmp)) {
+                                        seriesAddInt(&resultSeries[c], tmp);
                                     }
                                 } break;
                                 case DF_DOUBLE: {
@@ -461,48 +530,51 @@ DataFrame dfMerge_impl(const DataFrame* left,
                                     }
                                 } break;
                                 case DF_STRING: {
-                                    char* st2=NULL;
+                                    char* st2 = NULL;
                                     if (seriesGetString(sL, lr, &st2)) {
                                         seriesAddString(&resultSeries[c], st2);
-                                        free(st2);
-                                    }
-                                } break;
-                                case DF_DATETIME: {
-                                    long long dtVal;
-                                    if (seriesGetDateTime(sL, lr, &dtVal)) {
-                                        seriesAddDateTime(&resultSeries[c], dtVal);
-                                    }
-                                } break;
-                            }
-                        }
-                        size_t ro= leftCols;
-                        for (size_t rc=0; rc<rightCols; rc++) {
-                            if (rc == rightKeyIndex) continue;
-                            const Series* sR= right->getSeries(right, rc);
-                            switch(sR->type) {
-                                case DF_INT: {
-                                    int v;
-                                    if (seriesGetInt(sR, rr, &v)) {
-                                        seriesAddInt(&resultSeries[ro], v);
-                                    }
-                                } break;
-                                case DF_DOUBLE: {
-                                    double d;
-                                    if (seriesGetDouble(sR, rr, &d)) {
-                                        seriesAddDouble(&resultSeries[ro], d);
-                                    }
-                                } break;
-                                case DF_STRING: {
-                                    char* st2=NULL;
-                                    if (seriesGetString(sR, rr, &st2)) {
-                                        seriesAddString(&resultSeries[ro], st2);
                                         free(st2);
                                     }
                                 } break;
                                 case DF_DATETIME: {
                                     long long dtVal2;
-                                    if (seriesGetDateTime(sR, rr, &dtVal2)) {
-                                        seriesAddDateTime(&resultSeries[ro], dtVal2);
+                                    if (seriesGetDateTime(sL, lr, &dtVal2)) {
+                                        seriesAddDateTime(&resultSeries[c], dtVal2);
+                                    }
+                                } break;
+                            }
+                        }
+                        // copy right row except key
+                        size_t ro = leftCols;
+                        for (size_t rc = 0; rc < rightCols; rc++) {
+                            if (rc == rightKeyIndex) {
+                                continue;
+                            }
+                            const Series* sR = right->getSeries(right, rc);
+                            switch (sR->type) {
+                                case DF_INT: {
+                                    int tmp;
+                                    if (seriesGetInt(sR, rr, &tmp)) {
+                                        seriesAddInt(&resultSeries[ro], tmp);
+                                    }
+                                } break;
+                                case DF_DOUBLE: {
+                                    double d;
+                                    if (seriesGetDouble(sR, rr, &d)) {
+                                        seriesAddDouble(&resultSeries[ro], d);
+                                    }
+                                } break;
+                                case DF_STRING: {
+                                    char* st2 = NULL;
+                                    if (seriesGetString(sR, rr, &st2)) {
+                                        seriesAddString(&resultSeries[ro], st2);
+                                        free(st2);
+                                    }
+                                } break;
+                                case DF_DATETIME: {
+                                    long long dtVal3;
+                                    if (seriesGetDateTime(sR, rr, &dtVal3)) {
+                                        seriesAddDateTime(&resultSeries[ro], dtVal3);
                                     }
                                 } break;
                             }
@@ -510,12 +582,13 @@ DataFrame dfMerge_impl(const DataFrame* left,
                         }
                     }
                 }
-            } break;
-        }
-    }
+            } break; // end DF_DATETIME
 
-    // build final DF from resultSeries
-    for (size_t c=0; c< totalCols; c++) {
+        } // end switch
+    } // end for(lr)
+
+    // 8) Finally, build the DataFrame from the array of Series
+    for (size_t c = 0; c < totalCols; c++) {
         result.addSeries(&result, &resultSeries[c]);
         seriesFree(&resultSeries[c]);
     }
@@ -523,6 +596,7 @@ DataFrame dfMerge_impl(const DataFrame* left,
 
     return result;
 }
+
 
 
 /* -------------------------------------------------------------------------

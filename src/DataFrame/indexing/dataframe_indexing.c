@@ -707,3 +707,492 @@ DataFrame dfColumns_impl(const DataFrame* df)
 
     return result;
 }
+
+
+static void copyDataFrame(const DataFrame* src, DataFrame* dst)
+{
+    // Initialize dst
+    DataFrame_Create(dst);
+
+    size_t nCols = src->numColumns(src);
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* s = src->getSeries(src, c);
+        if (!s) continue;
+        // create a copy
+        Series newS;
+        seriesInit(&newS, s->name, s->type);
+
+        size_t nRows = seriesSize(s);
+        for (size_t r = 0; r < nRows; r++) {
+            switch (s->type) {
+                case DF_INT: {
+                    int val;
+                    if (seriesGetInt(s, r, &val)) {
+                        seriesAddInt(&newS, val);
+                    }
+                } break;
+                case DF_DOUBLE: {
+                    double dv;
+                    if (seriesGetDouble(s, r, &dv)) {
+                        seriesAddDouble(&newS, dv);
+                    }
+                } break;
+                case DF_STRING: {
+                    char* strVal=NULL;
+                    if (seriesGetString(s, r, &strVal)) {
+                        seriesAddString(&newS, strVal);
+                        free(strVal);
+                    }
+                } break;
+                case DF_DATETIME: {
+                    long long dtVal;
+                    if (seriesGetDateTime(s, r, &dtVal)) {
+                        seriesAddDateTime(&newS, dtVal);
+                    }
+                } break;
+            }
+        }
+        dst->addSeries(dst, &newS);
+        seriesFree(&newS);
+    }
+}
+
+
+DataFrame dfSetValue_impl(const DataFrame* df,
+                          size_t rowIndex,
+                          size_t colIndex,
+                          const void* newValue)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df || !newValue) {
+        return result; // empty
+    }
+
+    size_t nCols = df->numColumns(df);
+    size_t nRows = df->numRows(df);
+
+    // out-of-range checks
+    if (colIndex >= nCols || rowIndex >= nRows) {
+        // just copy original DF unchanged
+        copyDataFrame(df, &result);
+        return result;
+    }
+
+    // fetch the Series we want to set
+    const Series* origCol = df->getSeries(df, colIndex);
+    if (!origCol) {
+        // copy original
+        copyDataFrame(df, &result);
+        return result;
+    }
+
+    // Build result by copying all columns first
+    copyDataFrame(df, &result);
+
+    // Now locate the column in the result => we will modify that cell
+    Series* modCol = (Series*)daGetMutable(&result.columns, colIndex);
+    if (!modCol) {
+        // fallback => no change
+        return result;
+    }
+
+    // Check the column's type => set the cell if matching
+    switch (modCol->type) {
+        case DF_INT: {
+            // interpret newValue as (int*)
+            const int* valPtr = (const int*) newValue;
+            // Overwrite rowIndex in modCol->data
+            int* cellPtr = (int*)daGetMutable(&modCol->data, rowIndex);
+            if (cellPtr && valPtr) {
+                *cellPtr = *valPtr;
+            }
+        } break;
+        case DF_DOUBLE: {
+            const double* dPtr = (const double*) newValue;
+            double* cellPtr = (double*)daGetMutable(&modCol->data, rowIndex);
+            if (cellPtr && dPtr) {
+                *cellPtr = *dPtr;
+            }
+        } break;
+        case DF_STRING: {
+            // For DF_STRING, we stored each row as a char*. 
+            // We can free the old string (if you store it separately), then store a copy.
+            char** cellPtr = (char**)daGetMutable(&modCol->data, rowIndex);
+            if (cellPtr) {
+                // free old
+                // (depending on how your library does string storage—some do copy on add)
+                // We'll assume we can free(*cellPtr):
+                free(*cellPtr);
+                // now store a fresh copy of newValue
+                const char* newStr = (const char*) newValue;
+                if (newStr) {
+                    char* copyStr = strdup(newStr);
+                    *cellPtr = copyStr;
+                } else {
+                    *cellPtr = NULL;
+                }
+            }
+        } break;
+        case DF_DATETIME: {
+            // interpret newValue as (long long*) if using ms as epoch
+            const long long* dtPtr = (const long long*) newValue;
+            long long* cellPtr = (long long*)daGetMutable(&modCol->data, rowIndex);
+            if (cellPtr && dtPtr) {
+                *cellPtr = *dtPtr;
+            }
+        } break;
+    }
+
+    return result;
+}
+
+
+
+
+DataFrame dfSetRow_impl(const DataFrame* df,
+                        size_t rowIndex,
+                        const void** rowValues, 
+                        size_t valueCount)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df || !rowValues) {
+        return result;
+    }
+
+    size_t nCols = df->numColumns(df);
+    size_t nRows = df->numRows(df);
+
+    if (rowIndex >= nRows || valueCount != nCols) {
+        // mismatch => return copy
+        copyDataFrame(df, &result);
+        return result;
+    }
+
+    // build a copy of df
+    copyDataFrame(df, &result);
+
+    // For each column => set the cell to rowValues[c]
+    for (size_t c = 0; c < nCols; c++) {
+        // get the column in the result
+        Series* modCol = (Series*)daGetMutable(&result.columns, c);
+        if (!modCol) continue;
+
+        const void* valPtr = rowValues[c];
+        if (!valPtr) {
+            // skip or set to NA
+            continue;
+        }
+
+        switch (modCol->type) {
+            case DF_INT: {
+                int* cellPtr = (int*)daGetMutable(&modCol->data, rowIndex);
+                if (cellPtr) {
+                    *cellPtr = *(const int*)valPtr;
+                }
+            } break;
+            case DF_DOUBLE: {
+                double* cellPtr = (double*)daGetMutable(&modCol->data, rowIndex);
+                if (cellPtr) {
+                    *cellPtr = *(const double*)valPtr;
+                }
+            } break;
+            case DF_STRING: {
+                char** cellPtr = (char**)daGetMutable(&modCol->data, rowIndex);
+                if (cellPtr) {
+                    // free old
+                    free(*cellPtr);
+                    // store new
+                    *cellPtr = strdup((const char*)valPtr);
+                }
+            } break;
+            case DF_DATETIME: {
+                long long* cellPtr = (long long*)daGetMutable(&modCol->data, rowIndex);
+                if (cellPtr) {
+                    *cellPtr = *(const long long*)valPtr;
+                }
+            } break;
+        }
+    }
+
+    return result;
+}
+
+DataFrame dfSetColumn_impl(const DataFrame* df,
+                           const char* colName,
+                           const Series* newCol)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df || !colName || !newCol) {
+        return result;
+    }
+
+    size_t nCols = df->numColumns(df);
+    size_t nRows = df->numRows(df);
+
+    // must match row count
+    if (seriesSize(newCol) != nRows) {
+        // mismatch => copy DF
+        copyDataFrame(df, &result);
+        return result;
+    }
+
+    // find colName
+    size_t found = (size_t)-1;
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* s = df->getSeries(df, c);
+        if (s && strcmp(s->name, colName)==0) {
+            found = c;
+            break;
+        }
+    }
+    if (found == (size_t)-1) {
+        // not found => copy
+        copyDataFrame(df, &result);
+        return result;
+    }
+
+    // create copy
+    copyDataFrame(df, &result);
+
+    // now overwrite column "found" with newCol data (types must match)
+    Series* modCol = (Series*)daGetMutable(&result.columns, found);
+    if (!modCol) {
+        return result; // fallback
+    }
+    if (modCol->type != newCol->type) {
+        // skip if mismatch
+        return result;
+    }
+
+    // free the old data in modCol->data
+    // but careful if DF_STRING => free each pointer
+    // We'll just re-init for simplicity
+    seriesFree(modCol);
+    seriesInit(modCol, newCol->name, newCol->type);
+
+    // copy newCol's rows into modCol
+    size_t cRows = seriesSize(newCol);
+    for (size_t r = 0; r < cRows; r++) {
+        switch (newCol->type) {
+            case DF_INT: {
+                int v; 
+                if (seriesGetInt(newCol, r, &v)) {
+                    seriesAddInt(modCol, v);
+                }
+            } break;
+            case DF_DOUBLE: {
+                double d;
+                if (seriesGetDouble(newCol, r, &d)) {
+                    seriesAddDouble(modCol, d);
+                }
+            } break;
+            case DF_STRING: {
+                char* st=NULL;
+                if (seriesGetString(newCol, r, &st)) {
+                    seriesAddString(modCol, st);
+                    free(st);
+                }
+            } break;
+            case DF_DATETIME: {
+                long long dt;
+                if (seriesGetDateTime(newCol, r, &dt)) {
+                    seriesAddDateTime(modCol, dt);
+                }
+            } break;
+        }
+    }
+    return result;
+}
+
+
+DataFrame dfRenameColumn_impl(const DataFrame* df,
+                              const char* oldName,
+                              const char* newName)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df || !oldName || !newName) {
+        return result;
+    }
+
+    // copy DF
+    copyDataFrame(df, &result);
+
+    // find col with oldName
+    size_t nCols = result.numColumns(&result);
+    for (size_t c = 0; c < nCols; c++) {
+        Series* s = (Series*)daGetMutable(&result.columns, c);
+        if (!s) continue;
+        if (strcmp(s->name, oldName)==0) {
+            // rename
+            free(s->name);  // old name
+            s->name = strdup(newName);
+            break; 
+        }
+    }
+    return result;
+}
+
+// helper: addNAValue => just adds "0" or "NA" depending on type
+static void addNAValue(Series* s)
+{
+    switch (s->type) {
+        case DF_INT:      seriesAddInt(s, 0);  break;
+        case DF_DOUBLE:   seriesAddDouble(s, 0.0); break;
+        case DF_STRING:   seriesAddString(s, "NA"); break;
+        case DF_DATETIME: seriesAddDateTime(s, 0LL); break;
+    }
+}
+
+// helper: copyCell => read row=oldIdx from 'orig' and add to 'dest'
+static void copyCell(const Series* orig, Series* dest, size_t oldIdx)
+{
+    switch (orig->type) {
+        case DF_INT: {
+            int v;
+            if (seriesGetInt(orig, oldIdx, &v)) {
+                seriesAddInt(dest, v);
+            } else {
+                addNAValue(dest);
+            }
+        } break;
+        case DF_DOUBLE: {
+            double d;
+            if (seriesGetDouble(orig, oldIdx, &d)) {
+                seriesAddDouble(dest, d);
+            } else {
+                addNAValue(dest);
+            }
+        } break;
+        case DF_STRING: {
+            char* st=NULL;
+            if (seriesGetString(orig, oldIdx, &st)) {
+                seriesAddString(dest, st);
+                free(st);
+            } else {
+                addNAValue(dest);
+            }
+        } break;
+        case DF_DATETIME: {
+            long long dt;
+            if (seriesGetDateTime(orig, oldIdx, &dt)) {
+                seriesAddDateTime(dest, dt);
+            } else {
+                addNAValue(dest);
+            }
+        } break;
+    }
+}
+
+
+DataFrame dfReindex_impl(const DataFrame* df,
+                         const size_t* newIndices,
+                         size_t newN)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df || !newIndices || newN==0) {
+        return result; 
+    }
+
+    size_t nRows = df->numRows(df);
+    size_t nCols = df->numColumns(df);
+
+    // We'll build each column from scratch
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* orig = df->getSeries(df, c);
+        if (!orig) continue;
+
+        Series newS;
+        seriesInit(&newS, orig->name, orig->type);
+
+        for (size_t i = 0; i < newN; i++) {
+            size_t oldIdx = newIndices[i];
+            if (oldIdx >= nRows) {
+                // out-of-range => "NA"
+                addNAValue(&newS); 
+            } else {
+                copyCell(orig, &newS, oldIdx);
+            }
+        }
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+    return result;
+}
+
+
+DataFrame dfTake_impl(const DataFrame* df,
+                      const size_t* rowIndices,
+                      size_t count)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df || !rowIndices || count==0) {
+        return result;
+    }
+
+    size_t nRows = df->numRows(df);
+    size_t nCols = df->numColumns(df);
+
+    // We'll create each column from scratch
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* orig = df->getSeries(df, c);
+        if (!orig) continue;
+
+        Series newS;
+        seriesInit(&newS, orig->name, orig->type);
+
+        for (size_t i = 0; i < count; i++) {
+            size_t r = rowIndices[i];
+            if (r >= nRows) {
+                addNAValue(&newS);
+            } else {
+                copyCell(orig, &newS, r);
+            }
+        }
+        result.addSeries(&result, &newS);
+        seriesFree(&newS);
+    }
+    return result;
+}
+
+
+DataFrame dfReorderColumns_impl(const DataFrame* df,
+                                const size_t* newOrder,
+                                size_t colCount)
+{
+    DataFrame result;
+    DataFrame_Create(&result);
+    if (!df || !newOrder || colCount==0) {
+        return result;
+    }
+
+    size_t nCols = df->numColumns(df);
+
+    // for each newOrder[i], copy that column from df => result
+    for (size_t i = 0; i < colCount; i++) {
+        size_t oldPos = newOrder[i];
+        if (oldPos >= nCols) {
+            // skip or add blank
+            continue;
+        }
+        const Series* s = df->getSeries(df, oldPos);
+        if (!s) continue;
+
+        // copy entire column
+        Series copyS;
+        seriesInit(&copyS, s->name, s->type);
+
+        size_t nRows = seriesSize(s);
+        for (size_t r = 0; r < nRows; r++) {
+            copyCell(s, &copyS, r); // re-uses the helper from above
+        }
+        result.addSeries(&result, &copyS);
+        seriesFree(&copyS);
+    }
+    return result;
+}

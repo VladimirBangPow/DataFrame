@@ -15,12 +15,12 @@ int main(void)
     // testCore();
     // testDate();
     // testAggregate();
-    testCombine();
+    // testCombine();
 
     // testQuery();
     // testPrint();
     // testPlot();
-    // testIndexing();
+    testIndexing();
     // testReshape();
     //    testIO();
 

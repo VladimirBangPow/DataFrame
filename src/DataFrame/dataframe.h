@@ -62,6 +62,15 @@ typedef DataFrame (*DataFrameInsertFunc)(DataFrame* df, size_t colIndex, const S
 typedef DataFrame (*DataFrameIndexFunc)(const DataFrame* df);
 typedef DataFrame (*DataFrameColumnsFunc)(const DataFrame* df);
 
+typedef DataFrame (*DataFrameSetValueFunc)(const DataFrame* df, size_t rowIndex, size_t colIndex, void* value);
+typedef DataFrame (*DataFrameSetRowFunc)(const DataFrame* df, size_t rowIndex, const void** rowValues, size_t valueCount);
+typedef DataFrame (*DataFrameSetColumnFunc)(const DataFrame* df, const char* colName, const Series* newCol);
+typedef DataFrame (*DataFrameRenameColumnFunc)(const DataFrame* df, const char* oldName, const char* newName);
+typedef DataFrame (*DataFrameReindexFunc)(const DataFrame* df, const size_t* newIndices, size_t newN);
+typedef DataFrame (*DataFrameTakeFunc)(const DataFrame* df, const size_t* rowIndices, size_t count);
+typedef DataFrame (*DataFrameReorderColumnsFunc)(const DataFrame* df, const size_t* newOrder, size_t colCount);
+
+
 
 //Combining
 typedef enum {
@@ -92,8 +101,6 @@ typedef double (*DataFrameSumFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMeanFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMinFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMaxFunc)(const DataFrame* df, size_t colIndex);
-
-/* Additional aggregator function pointers */
 typedef double (*DataFrameCountFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameMedianFunc)(const DataFrame* df, size_t colIndex);
 typedef double (*DataFrameModeFunc)(const DataFrame* df, size_t colIndex);
@@ -272,13 +279,18 @@ struct DataFrame {
     DataFrameInsertFunc            insert;
     DataFrameIndexFunc             index;
     DataFrameColumnsFunc           cols;
+    DataFrameSetValueFunc          setValue;
+    DataFrameSetRowFunc            setRow;
+    DataFrameSetColumnFunc         setColumn;
+    DataFrameRenameColumnFunc      renameColumn;
+    DataFrameReindexFunc           reindex;
+    DataFrameTakeFunc              take;
+    DataFrameReorderColumnsFunc    reorderColumns;
 
     /* Combining */
     DataFrameConcatFunc            concat;
     DataFrameMergeFunc             merge;
     DataFrameJoinFunc              join;
-
-    /* Additional combining: */
     DataFrameUnionFunc             unionDF;         // 'union' is a reserved word, so 'unionDF'
     DataFrameIntersectionFunc      intersectionDF;
     DataFrameDifferenceFunc        differenceDF;

@@ -26,7 +26,6 @@ extern bool dfGetRow_impl(const DataFrame* df, size_t rowIndex, void*** outRow);
 extern DataFrame dfHead_impl(const DataFrame* df, size_t n);
 extern DataFrame dfTail_impl(const DataFrame* df, size_t n);
 extern DataFrame dfDescribe_impl(const DataFrame* df);
-
 extern DataFrame dfSlice_impl(const DataFrame* df, size_t start, size_t end);
 extern DataFrame dfSample_impl(const DataFrame* df, size_t count);
 extern DataFrame dfSelectColumns_impl(const DataFrame* df, const size_t* colIndices, size_t count);
@@ -86,6 +85,13 @@ extern DataFrame dfPop_impl(const DataFrame* df, const char* colName, DataFrame*
 extern DataFrame dfInsert_impl(DataFrame* df, size_t colIndex, const Series* s);
 extern DataFrame dfIndex_impl(const DataFrame* df);
 extern DataFrame dfColumns_impl(const DataFrame* df);
+extern DataFrame dfSetValue_impl(const DataFrame* df, size_t rowIndex, size_t colIndex, void* value);
+extern DataFrame dfSetRow_impl(const DataFrame* df, size_t rowIndex, const void** rowValues, size_t valueCount);
+extern DataFrame dfSetColumn_impl(const DataFrame* df, const char* colName, const Series* newCol);
+extern DataFrame dfRenameColumn_impl(const DataFrame* df, const char* oldName, const char* newName);
+extern DataFrame dfReindex_impl(const DataFrame* df, const size_t* newIndices, size_t newN);
+extern DataFrame dfTake_impl(const DataFrame* df, const size_t* rowIndices, size_t count);
+extern DataFrame dfReorderColumns_impl(const DataFrame* df, const size_t* newOrder, size_t colCount);
 
 /* Existing combine: */
 extern DataFrame dfConcat_impl(const DataFrame*, const DataFrame*);
@@ -223,8 +229,6 @@ void DataFrame_Create(DataFrame* df)
     df->mean         = dfMean_impl;
     df->min          = dfMin_impl;
     df->max          = dfMax_impl;
-
-    // Additional aggregator pointers
     df->count        = dfCount_impl;
     df->median       = dfMedian_impl;
     df->mode         = dfMode_impl;
@@ -268,6 +272,14 @@ void DataFrame_Create(DataFrame* df)
     df->insert       = dfInsert_impl;
     df->index        = dfIndex_impl;
     df->cols         = dfColumns_impl;
+    df->setValue     = dfSetValue_impl;
+    df->setRow       = dfSetRow_impl;
+    df->setColumn    = dfSetColumn_impl;
+    df->renameColumn = dfRenameColumn_impl;
+    df->reindex      = dfReindex_impl;
+    df->take         = dfTake_impl;
+    df->reorderColumns = dfReorderColumns_impl;
+
 
     // Printing / IO:
     df->print        = dfPrint_impl;
@@ -292,8 +304,6 @@ void DataFrame_Create(DataFrame* df)
     df->concat       = dfConcat_impl;
     df->merge        = dfMerge_impl;
     df->join         = dfJoin_impl;
-
-    // New combining:
     df->unionDF      = dfUnion_impl;          // "union" might be a reserved word, so "unionDF"
     df->intersectionDF = dfIntersection_impl; // intersection
     df->differenceDF   = dfDifference_impl;   // difference

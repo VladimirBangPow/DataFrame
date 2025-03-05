@@ -2,17 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "dataframe_indexing_test.h"  // the header for this test suite
-#include "../dataframe.h"            // your DataFrame struct and function pointers
-#include "../../Series/series.h"     // for creating Series
+#include "dataframe_indexing_test.h"  // The header for this test suite
+#include "../dataframe.h"            // Your DataFrame struct and function pointers
+#include "../../Series/series.h"     // For creating Series
 
 // ------------------------------------------------------------------
 // Helper routines for building test Series
 // ------------------------------------------------------------------
 
-/** 
- * Build a small integer Series with given name and values. 
- */
 static Series buildIntSeries(const char* name, const int* values, size_t count)
 {
     Series s;
@@ -23,9 +20,6 @@ static Series buildIntSeries(const char* name, const int* values, size_t count)
     return s;
 }
 
-/** 
- * Build a string Series for testing. 
- */
 static Series buildStringSeries(const char* name, const char* const* strings, size_t count)
 {
     Series s;
@@ -37,274 +31,278 @@ static Series buildStringSeries(const char* name, const char* const* strings, si
 }
 
 // ------------------------------------------------------------------
-// 1) Test dfAt_impl and dfIat_impl
+// 1) Test dfAt_impl
 // ------------------------------------------------------------------
-
-static void testAtIatBasic(void)
+static void testDfAt(void)
 {
+    printf("Running testDfAt...\n");
+
     DataFrame df;
     DataFrame_Create(&df);
 
-    // We'll build 2 columns: "Nums"(int), "Words"(string), with 5 rows
-    int nums[] = {10, 20, 30, 40, 50};
+    // Build 2 columns: "Nums"(int), "Words"(string), 5 rows
+    int nums[] = {10,20,30,40,50};
     const char* words[] = {"Alpha","Beta","Gamma","Delta","Epsilon"};
 
-    Series s1 = buildIntSeries("Nums", nums, 5);
-    bool ok = df.addSeries(&df, &s1);
-    assert(ok);
-    seriesFree(&s1);
+    Series sNums = buildIntSeries("Nums", nums, 5);
+    df.addSeries(&df, &sNums);
+    seriesFree(&sNums);
 
-    Series s2 = buildStringSeries("Words", words, 5);
-    ok = df.addSeries(&df, &s2);
-    assert(ok);
-    seriesFree(&s2);
+    Series sWords = buildStringSeries("Words", words, 5);
+    df.addSeries(&df, &sWords);
+    seriesFree(&sWords);
 
-    assert(df.numColumns(&df) == 2);
-    assert(df.numRows(&df) == 5);
-
-    // Test dfAt_impl for (row=2, colName="Nums") => that should be 30
-    DataFrame cellDF = df.at(&df, 2, "Nums");
-    // We expect a 1×1 DataFrame with column name="Nums", row=0 => 30
-    assert(cellDF.numColumns(&cellDF)==1);
-    assert(cellDF.numRows(&cellDF)==1);
+    // 1) Normal usage: at(row=2, colName="Nums") => should produce a 1×1 DF with "Nums"[0] = 30
     {
+        DataFrame cellDF = df.at(&df, 2, "Nums");
+        assert(cellDF.numColumns(&cellDF)==1);
+        assert(cellDF.numRows(&cellDF)==1);
+
         const Series* c = cellDF.getSeries(&cellDF, 0);
         assert(strcmp(c->name, "Nums")==0);
         int val=0;
         bool got = seriesGetInt(c, 0, &val);
         assert(got && val==30);
+
+        DataFrame_Destroy(&cellDF);
     }
-    DataFrame_Destroy(&cellDF);
 
-    // Test dfAt_impl for out-of-range => row=10 => empty
-    DataFrame emptyDF = df.at(&df, 10, "Nums");
-    assert(emptyDF.numColumns(&emptyDF)==0);
-    assert(emptyDF.numRows(&emptyDF)==0);
-    DataFrame_Destroy(&emptyDF);
-
-    // Test dfAt_impl for colName not found => "Bogus" => empty
-    DataFrame noColDF = df.at(&df, 1, "Bogus");
-    assert(noColDF.numColumns(&noColDF)==0);
-    assert(noColDF.numRows(&noColDF)==0);
-    DataFrame_Destroy(&noColDF);
-
-    // Test dfIat_impl for (row=3, col=1) => that is row3 of "Words", which is "Delta"
-    DataFrame iatDF = df.iat(&df, 3, 1);
-    assert(iatDF.numColumns(&iatDF)==1);
-    assert(iatDF.numRows(&iatDF)==1);
+    // 2) Out-of-range row => empty DF
     {
-        const Series* c = iatDF.getSeries(&iatDF, 0);
-        assert(strcmp(c->name, "Words")==0);
+        DataFrame emptyDF = df.at(&df, 10, "Nums");
+        assert(emptyDF.numColumns(&emptyDF)==0);
+        assert(emptyDF.numRows(&emptyDF)==0);
+        DataFrame_Destroy(&emptyDF);
+    }
+
+    // 3) colName not found => empty DF
+    {
+        DataFrame noCol = df.at(&df, 1, "Bogus");
+        assert(noCol.numColumns(&noCol)==0);
+        assert(noCol.numRows(&noCol)==0);
+        DataFrame_Destroy(&noCol);
+    }
+
+    DataFrame_Destroy(&df);
+    printf("testDfAt passed.\n");
+}
+
+// ------------------------------------------------------------------
+// 2) Test dfIat_impl
+// ------------------------------------------------------------------
+static void testDfIat(void)
+{
+    printf("Running testDfIat...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int nums[] = {10,20,30,40,50};
+    const char* words[] = {"Alpha","Beta","Gamma","Delta","Epsilon"};
+
+    Series sNums = buildIntSeries("Nums", nums, 5);
+    df.addSeries(&df, &sNums);
+    seriesFree(&sNums);
+
+    Series sWords = buildStringSeries("Words", words, 5);
+    df.addSeries(&df, &sWords);
+    seriesFree(&sWords);
+
+    // 1) dfIat(row=3, col=1) => should produce "Words" row => "Delta"
+    {
+        DataFrame cDF = df.iat(&df, 3, 1);
+        assert(cDF.numColumns(&cDF)==1);
+        assert(cDF.numRows(&cDF)==1);
+
+        const Series* col = cDF.getSeries(&cDF, 0);
+        assert(strcmp(col->name,"Words")==0);
         char* st=NULL;
-        bool got = seriesGetString(c, 0, &st);
+        bool got = seriesGetString(col, 0, &st);
         assert(got && strcmp(st,"Delta")==0);
         free(st);
+
+        DataFrame_Destroy(&cDF);
     }
-    DataFrame_Destroy(&iatDF);
 
-    // iat out-of-range => row=7 => empty
-    DataFrame iatEmpty = df.iat(&df, 7, 1);
-    assert(iatEmpty.numColumns(&iatEmpty)==0);
-    assert(iatEmpty.numRows(&iatEmpty)==0);
-    DataFrame_Destroy(&iatEmpty);
+    // 2) row out-of-range => empty
+    {
+        DataFrame eDF = df.iat(&df, 10, 1);
+        assert(eDF.numColumns(&eDF)==0);
+        assert(eDF.numRows(&eDF)==0);
+        DataFrame_Destroy(&eDF);
+    }
 
-    // iat col out-of-range => col=5 => empty
-    DataFrame iatEmptyCol = df.iat(&df, 1, 5);
-    assert(iatEmptyCol.numColumns(&iatEmptyCol)==0);
-    assert(iatEmptyCol.numRows(&iatEmptyCol)==0);
-    DataFrame_Destroy(&iatEmptyCol);
+    // 3) col out-of-range => empty
+    {
+        DataFrame e2 = df.iat(&df, 1, 5);
+        assert(e2.numColumns(&e2)==0);
+        assert(e2.numRows(&e2)==0);
+        DataFrame_Destroy(&e2);
+    }
 
     DataFrame_Destroy(&df);
-    printf(" - dfAt_impl and dfIat_impl tests passed.\n");
+    printf("testDfIat passed.\n");
 }
 
 // ------------------------------------------------------------------
-// 2) Test dfLoc_impl
+// 3) Test dfLoc_impl
 // ------------------------------------------------------------------
-static void testLocSubsets(void)
+static void testDfLoc(void)
 {
+    printf("Running testDfLoc...\n");
+
     DataFrame df;
     DataFrame_Create(&df);
 
-    // 3 columns: "A"(int), "B"(int), "C"(string)
-    int va[] = {10,20,30,40,50};
-    Series sA = buildIntSeries("A", va, 5);
-    bool ok = df.addSeries(&df, &sA);
-    assert(ok);
+    // 3 columns => "A","B","C"
+    int arrA[] = {10,20,30,40,50};
+    int arrB[] = {100,200,300,400,500};
+    const char* arrC[] = {"X","Y","Z","P","Q"};
+
+    Series sA = buildIntSeries("A", arrA, 5);
+    df.addSeries(&df, &sA);
     seriesFree(&sA);
 
-    int vb[] = {100,200,300,400,500};
-    Series sB = buildIntSeries("B", vb, 5);
-    ok = df.addSeries(&df, &sB);
-    assert(ok);
+    Series sB = buildIntSeries("B", arrB, 5);
+    df.addSeries(&df, &sB);
     seriesFree(&sB);
 
-    const char* vc[] = {"X","Y","Z","P","Q"};
-    Series sC = buildStringSeries("C", vc, 5);
-    ok = df.addSeries(&df, &sC);
-    assert(ok);
+    Series sC = buildStringSeries("C", arrC, 5);
+    df.addSeries(&df, &sC);
     seriesFree(&sC);
 
-    assert(df.numColumns(&df)==3);
-    assert(df.numRows(&df)==5);
-
-    // We want rowIndices => {0,2,4}, colNames => {"A","C"}
-    size_t rowIdx[] = {0,2,4};
-    const char* wantedCols[] = {"A","C"};
-
-    DataFrame subDF = df.loc(&df, rowIdx, 3, wantedCols, 2);
-    // We expect subDF => 2 columns => "A","C", and 3 rows => from original rows 0,2,4
-    assert(subDF.numColumns(&subDF)==2);
-    assert(subDF.numRows(&subDF)==3);
-
-    // Check col0 => "A" => row0 =>10, row1 =>30, row2 =>50
+    // 1) rowIndices => {0,2,4}, colNames => {"A","C"}
     {
-        const Series* col0 = subDF.getSeries(&subDF, 0);
-        assert(strcmp(col0->name,"A")==0);
+        size_t rowIdx[] = {0,2,4};
+        const char* colNames[] = {"A","C"};
+        DataFrame subDF = df.loc(&df, rowIdx, 3, colNames, 2);
+        assert(subDF.numColumns(&subDF)==2);
+        assert(subDF.numRows(&subDF)==3);
+
+        // col0 => "A" => row0 =>10, row1 =>30, row2 =>50
+        const Series* c0 = subDF.getSeries(&subDF, 0);
+        assert(strcmp(c0->name,"A")==0);
         int val=0;
-        bool got = seriesGetInt(col0, 0, &val);
-        assert(got && val==10);
-        got = seriesGetInt(col0, 2, &val);
+        bool got = seriesGetInt(c0, 2, &val);
         assert(got && val==50);
-    }
-    // Check col1 => "C" => row0 => "X", row1 => "Z", row2 => "Q"
-    {
-        const Series* col1 = subDF.getSeries(&subDF, 1);
-        assert(strcmp(col1->name,"C")==0);
+
+        // col1 => "C" => row1 => "Z"
+        const Series* c1 = subDF.getSeries(&subDF, 1);
         char* st=NULL;
-        bool got = seriesGetString(col1, 1, &st); // row1 => "Z"
+        got = seriesGetString(c1, 1, &st);
         assert(got && strcmp(st,"Z")==0);
         free(st);
+
+        DataFrame_Destroy(&subDF);
     }
-    DataFrame_Destroy(&subDF);
 
-    // If we specify a colName not found => skip. e.g. wantedCols2 => {"A","Bogus","C"}
-    const char* wantedCols2[] = {"A","Bogus","C"};
-    DataFrame skipDF = df.loc(&df, rowIdx, 3, wantedCols2, 3);
-    // We still get only "A","C" because "Bogus" is not found
-    assert(skipDF.numColumns(&skipDF)==2);
-    assert(skipDF.numRows(&skipDF)==3);
-    DataFrame_Destroy(&skipDF);
-
-    // If row index is out-of-range => skip that row
-    size_t rowIdx2[] = {1,9}; // row9 doesn't exist
-    const char* wantedCols3[] = {"B"};
-    DataFrame partialDF = df.loc(&df, rowIdx2, 2, wantedCols3, 1);
-    // That means row1 => 1 row only, since row9 is OOR => skip
-    assert(partialDF.numColumns(&partialDF)==1);
-    assert(partialDF.numRows(&partialDF)==1);
+    // 2) unknown col => skip
     {
-        const Series* cB = partialDF.getSeries(&partialDF, 0);
-        int val=0;
-        bool got = seriesGetInt(cB, 0, &val);
-        assert(got && val==200); // from original row1 => B=200
+        size_t rowIdx2[] = {0,1,2};
+        const char* colNames2[] = {"A","Bogus","C"};
+        DataFrame skipDF = df.loc(&df, rowIdx2, 3, colNames2, 3);
+        // => col "A","C" only
+        assert(skipDF.numColumns(&skipDF)==2);
+        DataFrame_Destroy(&skipDF);
     }
-    DataFrame_Destroy(&partialDF);
+
+    // 3) out-of-range row => skip
+    {
+        size_t rowIdx3[] = {1,9}; 
+        const char* coln[] = {"B"};
+        DataFrame part = df.loc(&df, rowIdx3, 2, coln, 1);
+        // => only row1 is valid => 1 row
+        assert(part.numColumns(&part)==1);
+        assert(part.numRows(&part)==1);
+        DataFrame_Destroy(&part);
+    }
 
     DataFrame_Destroy(&df);
-    printf(" - dfLoc_impl tests passed.\n");
+    printf("testDfLoc passed.\n");
 }
 
 // ------------------------------------------------------------------
-// 3) Test dfIloc_impl
+// 4) Test dfIloc_impl
 // ------------------------------------------------------------------
-
-static void testIlocSubsets(void)
+static void testDfIloc(void)
 {
+    printf("Running testDfIloc...\n");
+
     DataFrame df;
     DataFrame_Create(&df);
 
-    // 3 columns: "X"(string), "Y"(int), "Z"(int)
+    // 3 columns => "X"(string), "Y"(int), "Z"(int)
     const char* vx[] = {"cat","dog","bird","fish","lion"};
     Series sX = buildStringSeries("X", vx, 5);
-    bool ok = df.addSeries(&df, &sX);
-    assert(ok);
+    df.addSeries(&df, &sX);
     seriesFree(&sX);
 
     int vy[] = {1,2,3,4,5};
     Series sY = buildIntSeries("Y", vy, 5);
-    ok = df.addSeries(&df, &sY);
-    assert(ok);
+    df.addSeries(&df, &sY);
     seriesFree(&sY);
 
     int vz[] = {10,20,30,40,50};
-    Series sZ;
-    seriesInit(&sZ, "Z", DF_INT);
-    for(size_t i=0;i<5;i++){
-        seriesAddInt(&sZ, vz[i]);
-    }
-    ok = df.addSeries(&df, &sZ);
-    assert(ok);
+    Series sZ = buildIntSeries("Z", vz, 5);
+    df.addSeries(&df, &sZ);
     seriesFree(&sZ);
 
-    assert(df.numColumns(&df)==3);
-    assert(df.numRows(&df)==5);
-
-    // df.iloc(&df, rowStart=1, rowEnd=4, colIndices={0,2}, colCount=2)
-    // That means rows [1..4) => row1, row2, row3 => total 3 rows
-    // columns => col0="X", col2="Z"
-    size_t wantedCols[] = {0,2};
-    DataFrame sliceDF = df.iloc(&df, 1, 4, wantedCols, 2);
-    // => 2 columns, 3 rows
-    assert(sliceDF.numColumns(&sliceDF)==2);
-    assert(sliceDF.numRows(&sliceDF)==3);
-
-    // check the string col => row0 => originally row1 => "dog", row2 => originally row3 => "fish"
+    // 1) rows => [1..4) => row1,row2,row3 => columns => col0("X"), col2("Z")
     {
-        const Series* cX = sliceDF.getSeries(&sliceDF, 0);
-        assert(strcmp(cX->name,"X")==0);
+        size_t wantedCols[] = {0,2};
+        DataFrame slice = df.iloc(&df, 1, 4, wantedCols, 2);
+        assert(slice.numColumns(&slice)==2);
+        assert(slice.numRows(&slice)==3);
+
+        // col0 => "X", row2 => originally row3 => "fish"
+        const Series* cX = slice.getSeries(&slice, 0);
         char* st=NULL;
-        bool got = seriesGetString(cX, 2, &st); // row2 => originally row3 => "fish"
+        bool got = seriesGetString(cX, 2, &st);
         assert(got && strcmp(st,"fish")==0);
         free(st);
-    }
-    // check the int col => row0 => originally row1 => Z=20, row2 => originally row3 => Z=40
-    {
-        const Series* cZ = sliceDF.getSeries(&sliceDF, 1);
-        assert(strcmp(cZ->name,"Z")==0);
-        int val=0;
-        bool got = seriesGetInt(cZ, 0, &val); 
-        assert(got && val==20); // row1 => 20
-        got = seriesGetInt(cZ, 2, &val);
-        assert(got && val==40);
-    }
-    DataFrame_Destroy(&sliceDF);
 
-    // If rowStart >= nRows => empty
-    DataFrame emptyDF = df.iloc(&df, 10, 12, wantedCols, 2);
-    assert(emptyDF.numColumns(&emptyDF)==0);
-    assert(emptyDF.numRows(&emptyDF)==0);
-    DataFrame_Destroy(&emptyDF);
-
-    // If colIndices has out-of-range => skip
-    size_t bigCols[] = { 1, 5 }; // col5 doesn't exist, so we skip it
-    DataFrame skipColDF = df.iloc(&df, 0, 2, bigCols, 2);
-    // => only col1 => "Y", for rows 0..2 => row0, row1 => 2 rows, 1 column
-    assert(skipColDF.numColumns(&skipColDF)==1);
-    assert(skipColDF.numRows(&skipColDF)==2);
-    {
-        const Series* cY = skipColDF.getSeries(&skipColDF, 0);
-        assert(strcmp(cY->name,"Y")==0);
+        // col1 => "Z", row0 => originally row1 => 20
+        const Series* cZ = slice.getSeries(&slice, 1);
         int val=0;
-        bool got = seriesGetInt(cY, 1, &val); // row1 => originally row1 => 2
-        assert(got && val==2);
+        got = seriesGetInt(cZ, 0, &val);
+        assert(got && val==20);
+
+        DataFrame_Destroy(&slice);
     }
-    DataFrame_Destroy(&skipColDF);
+
+    // 2) rowStart >= nRows => empty
+    {
+        size_t wantedCols2[] = {0,1};
+        DataFrame eDF = df.iloc(&df, 10, 12, wantedCols2, 2);
+        assert(eDF.numColumns(&eDF)==0);
+        assert(eDF.numRows(&eDF)==0);
+        DataFrame_Destroy(&eDF);
+    }
+
+    // 3) colIndices out-of-range => skip
+    {
+        size_t bigCols[] = {1,5};
+        DataFrame skipCols = df.iloc(&df, 0, 2, bigCols, 2);
+        // => only col1 => "Y"
+        assert(skipCols.numColumns(&skipCols)==1);
+        assert(skipCols.numRows(&skipCols)==2);
+        DataFrame_Destroy(&skipCols);
+    }
 
     DataFrame_Destroy(&df);
-    printf(" - dfIloc_impl tests passed.\n");
+    printf("testDfIloc passed.\n");
 }
 
 // ------------------------------------------------------------------
-// 4) Test the new functions: dfDrop, dfPop, dfInsert, dfIndex, dfColumns
+// 5) Test dfDrop_impl
 // ------------------------------------------------------------------
-
-static void testDropPopInsert(void)
+static void testDfDrop(void)
 {
+    printf("Running testDfDrop...\n");
+
     DataFrame df;
     DataFrame_Create(&df);
 
-    // 3 columns: "A","B","C" => each 3 rows
     int colA[] = {1,2,3};
     int colB[] = {10,20,30};
     const char* colC[] = {"apple","banana","cherry"};
@@ -313,172 +311,600 @@ static void testDropPopInsert(void)
     Series sB = buildIntSeries("B", colB, 3);
     Series sC = buildStringSeries("C", colC, 3);
 
-    bool ok = df.addSeries(&df, &sA); assert(ok);
-    ok = df.addSeries(&df, &sB);     assert(ok);
-    ok = df.addSeries(&df, &sC);     assert(ok);
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+    df.addSeries(&df, &sC);
 
     seriesFree(&sA);
     seriesFree(&sB);
     seriesFree(&sC);
 
-    // test drop => drop "B"
-    const char* dropNames[] = {"B"};
-    DataFrame droppedDF = df.drop(&df, dropNames, 1); // new DF missing "B"
-    assert(droppedDF.numColumns(&droppedDF)==2);
-    assert(droppedDF.numRows(&droppedDF)==3);
+    // drop "B"
     {
-        // We expect columns "A", "C"
-        const Series* c0 = droppedDF.getSeries(&droppedDF, 0);
+        const char* dropNames[] = {"B"};
+        DataFrame dropped = df.drop(&df, dropNames, 1);
+        assert(dropped.numColumns(&dropped)==2);
+        assert(dropped.numRows(&dropped)==3);
+
+        const Series* c0 = dropped.getSeries(&dropped, 0);
         assert(strcmp(c0->name,"A")==0);
-        const Series* c1 = droppedDF.getSeries(&droppedDF, 1);
+        const Series* c1 = dropped.getSeries(&dropped, 1);
         assert(strcmp(c1->name,"C")==0);
-    }
-    DataFrame_Destroy(&droppedDF);
 
-    // test pop => pop "C"
-    DataFrame popped;
-    DataFrame_Create(&popped);
-    DataFrame popDF = df.pop(&df, "C", &popped);
-    // popDF => 2 columns => "A","B"; popped => 1 column => "C"
-    assert(popDF.numColumns(&popDF)==2);
-    assert(popDF.numRows(&popDF)==3);
+        DataFrame_Destroy(&dropped);
+    }
+
+    // drop multiple => e.g. "A","C"
     {
-        const Series* c0 = popDF.getSeries(&popDF, 0);
-        assert(strcmp(c0->name,"A")==0);
-        const Series* c1 = popDF.getSeries(&popDF, 1);
-        assert(strcmp(c1->name,"B")==0);
+        const char* dropMulti[] = {"A","C"};
+        DataFrame d2 = df.drop(&df, dropMulti, 2);
+        // => only "B" remains
+        assert(d2.numColumns(&d2)==1);
+        assert(d2.numRows(&d2)==3);
+
+        const Series* onlyCol = d2.getSeries(&d2, 0);
+        assert(strcmp(onlyCol->name,"B")==0);
+
+        DataFrame_Destroy(&d2);
     }
-    assert(popped.numColumns(&popped)==1);
-    assert(popped.numRows(&popped)==3);
-    {
-        const Series* pc = popped.getSeries(&popped, 0);
-        assert(strcmp(pc->name,"C")==0);
-        char* st=NULL;
-        bool got = seriesGetString(pc, 2, &st);
-        assert(got && strcmp(st,"cherry")==0);
-        free(st);
-    }
-    DataFrame_Destroy(&popped);
-    DataFrame_Destroy(&popDF);
-
-    // test insert => insert a new column "Z" after col0 => position=1
-    Series sZ;
-    seriesInit(&sZ, "Z", DF_INT);
-    // must match row count=3
-    seriesAddInt(&sZ, 100);
-    seriesAddInt(&sZ, 200);
-    seriesAddInt(&sZ, 300);
-
-    DataFrame insertedDF = df.insert(&df, 1, &sZ);
-    // now columns => [ "A"(col0), "Z"(col1), "B"(col2), "C"(col3) ]
-    assert(insertedDF.numColumns(&insertedDF)==4);
-    // check col1 => "Z"
-    {
-        const Series* zcol = insertedDF.getSeries(&insertedDF, 1);
-        assert(strcmp(zcol->name, "Z")==0);
-        int val;
-        bool got = seriesGetInt(zcol, 2, &val);
-        assert(got && val==300);
-    }
-    DataFrame_Destroy(&insertedDF);
-
-    seriesFree(&sZ);
-
-    // test insert mismatch => let's create a col with 2 rows, while DF has 3 => 
-    // see if your code just copies original or errors out
-    Series sBad;
-    seriesInit(&sBad, "Bad", DF_INT);
-    seriesAddInt(&sBad, 999);
-    seriesAddInt(&sBad, 111);
-    // Insert => expecting to skip or warn
-    DataFrame mismatchDF = df.insert(&df, 1, &sBad);
-    // if your code does skip or fallback to original => we see 3 columns only
-    assert(mismatchDF.numColumns(&mismatchDF)==3);
-    // i.e. "A","B","C"
-    DataFrame_Destroy(&mismatchDF);
-
-    seriesFree(&sBad);
 
     DataFrame_Destroy(&df);
-    printf(" - dfDrop_impl, dfPop_impl, dfInsert_impl tests passed.\n");
+    printf("testDfDrop passed.\n");
 }
 
 // ------------------------------------------------------------------
-// 5) Test dfIndex_impl and dfColumns_impl
+// 6) Test dfPop_impl
 // ------------------------------------------------------------------
-
-static void testIndexAndColumns(void)
+static void testDfPop(void)
 {
+    printf("Running testDfPop...\n");
+
     DataFrame df;
     DataFrame_Create(&df);
 
-    // 2 columns, 5 rows
-    int col1[] = {1,2,3,4,5};
-    const char* col2[] = {"alpha","beta","gamma","delta","epsilon"};
+    int colA[] = {1,2,3};
+    int colB[] = {10,20,30};
+    const char* colC[] = {"apple","banana","cherry"};
 
-    Series s1 = buildIntSeries("Nums", col1, 5);
-    Series s2 = buildStringSeries("Words", col2, 5);
-    bool ok = df.addSeries(&df, &s1);
-    assert(ok);
-    ok = df.addSeries(&df, &s2);
-    assert(ok);
+    Series sA = buildIntSeries("A", colA, 3);
+    df.addSeries(&df, &sA);
+    seriesFree(&sA);
 
-    seriesFree(&s1);
-    seriesFree(&s2);
+    Series sB = buildIntSeries("B", colB, 3);
+    df.addSeries(&df, &sB);
+    seriesFree(&sB);
 
-    // test df.index => single col => "index" => [0,1,2,3,4]
-    DataFrame idxDF = df.index(&df);
-    // => 1 col, 5 rows
-    assert(idxDF.numColumns(&idxDF)==1);
-    assert(idxDF.numRows(&idxDF)==5);
+    Series sC = buildStringSeries("C", colC, 3);
+    df.addSeries(&df, &sC);
+    seriesFree(&sC);
+
+    // pop "B"
     {
-        const Series* iSer = idxDF.getSeries(&idxDF, 0);
-        assert(strcmp(iSer->name,"index")==0);
-        int val;
-        bool got = seriesGetInt(iSer, 4, &val);
-        assert(got && val==4);
-    }
-    DataFrame_Destroy(&idxDF);
+        DataFrame poppedCol;
+        DataFrame_Create(&poppedCol);
 
-    // test df.cols => single col => "columns" => ["Nums","Words"]
-    DataFrame colsDF = df.cols(&df);
-    // => 1 col, 2 rows
-    assert(colsDF.numColumns(&colsDF)==1);
-    assert(colsDF.numRows(&colsDF)==2);
-    {
-        const Series* colSer = colsDF.getSeries(&colsDF, 0);
-        assert(strcmp(colSer->name,"columns")==0);
-        // row0 => "Nums", row1 => "Words"
-        char* st=NULL;
-        bool got = seriesGetString(colSer, 0, &st);
-        assert(got && strcmp(st,"Nums")==0);
-        free(st);
-        got = seriesGetString(colSer, 1, &st);
-        assert(got && strcmp(st,"Words")==0);
-        free(st);
+        DataFrame afterPop = df.pop(&df, "B", &poppedCol);
+        // afterPop => "A","C" => 2 cols, 3 rows
+        // poppedCol => "B" => 1 col, 3 rows
+        assert(afterPop.numColumns(&afterPop)==2);
+        assert(afterPop.numRows(&afterPop)==3);
+        assert(poppedCol.numColumns(&poppedCol)==1);
+        assert(poppedCol.numRows(&poppedCol)==3);
+
+        const Series* poppedSeries = poppedCol.getSeries(&poppedCol, 0);
+        assert(strcmp(poppedSeries->name,"B")==0);
+        int val=0;
+        bool got = seriesGetInt(poppedSeries,2,&val);
+        assert(got && val==30);
+
+        DataFrame_Destroy(&poppedCol);
+        DataFrame_Destroy(&afterPop);
     }
-    DataFrame_Destroy(&colsDF);
 
     DataFrame_Destroy(&df);
-    printf(" - dfIndex_impl, dfColumns_impl tests passed.\n");
+    printf("testDfPop passed.\n");
 }
 
 // ------------------------------------------------------------------
-// The main test driver for indexing + new pandas-like methods
+// 7) Test dfInsert_impl
 // ------------------------------------------------------------------
+static void testDfInsert(void)
+{
+    printf("Running testDfInsert...\n");
 
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    int colB[] = {10,20,30};
+    Series sA = buildIntSeries("A", colA, 3);
+    Series sB = buildIntSeries("B", colB, 3);
+
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+
+    // Insert "Z"(3 rows) at position=1
+    Series sZ;
+    seriesInit(&sZ, "Z", DF_INT);
+    seriesAddInt(&sZ,100);
+    seriesAddInt(&sZ,200);
+    seriesAddInt(&sZ,300);
+
+    DataFrame insDF = df.insert(&df,1,&sZ);
+    // => columns => ["A"(0), "Z"(1), "B"(2)] => total 3 columns
+    assert(insDF.numColumns(&insDF)==3);
+    const Series* zCol = insDF.getSeries(&insDF, 1);
+    assert(strcmp(zCol->name,"Z")==0);
+    int val=0;
+    bool got = seriesGetInt(zCol, 2, &val);
+    assert(got && val==300);
+
+    DataFrame_Destroy(&insDF);
+    seriesFree(&sZ);
+
+    // Insert mismatch => 2 rows vs. DF has 3 => skip
+    Series sBad;
+    seriesInit(&sBad,"Bad",DF_INT);
+    seriesAddInt(&sBad,999);
+    seriesAddInt(&sBad,111);
+
+    DataFrame mismatch = df.insert(&df,1,&sBad);
+    // => should remain 2 columns => "A","B"
+    assert(mismatch.numColumns(&mismatch)==2);
+
+    DataFrame_Destroy(&mismatch);
+    seriesFree(&sBad);
+
+    DataFrame_Destroy(&df);
+    printf("testDfInsert passed.\n");
+}
+
+// ------------------------------------------------------------------
+// 8) Test dfIndex_impl
+// ------------------------------------------------------------------
+static void testDfIndex(void)
+{
+    printf("Running testDfIndex...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 2 columns => 4 rows
+    int colX[] = {11,22,33,44};
+    int colY[] = {100,200,300,400};
+    Series sX = buildIntSeries("X", colX, 4);
+    Series sY = buildIntSeries("Y", colY, 4);
+    df.addSeries(&df, &sX);
+    df.addSeries(&df, &sY);
+
+    seriesFree(&sX);
+    seriesFree(&sY);
+
+    // df.index => single col => "index" => [0,1,2,3]
+    DataFrame idxDF = df.index(&df);
+    assert(idxDF.numColumns(&idxDF)==1);
+    assert(idxDF.numRows(&idxDF)==4);
+
+    const Series* idxS = idxDF.getSeries(&idxDF, 0);
+    assert(strcmp(idxS->name,"index")==0);
+    int val=0;
+    bool got = seriesGetInt(idxS,3,&val);
+    assert(got && val==3);
+
+    DataFrame_Destroy(&idxDF);
+    DataFrame_Destroy(&df);
+
+    printf("testDfIndex passed.\n");
+}
+
+// ------------------------------------------------------------------
+// 9) Test dfColumns_impl
+// ------------------------------------------------------------------
+static void testDfColumns(void)
+{
+    printf("Running testDfColumns...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 3 columns => "One","Two","Three"
+    int col1[] = {10,20};
+    Series s1 = buildIntSeries("One", col1, 2);
+    df.addSeries(&df, &s1);
+    seriesFree(&s1);
+
+    int col2[] = {100,200};
+    Series s2 = buildIntSeries("Two", col2, 2);
+    df.addSeries(&df, &s2);
+    seriesFree(&s2);
+
+    const char* arr3[] = {"Hello","World"};
+    Series s3 = buildStringSeries("Three", arr3, 2);
+    df.addSeries(&df,&s3);
+    seriesFree(&s3);
+
+    // df.columns => single col => "columns" => rows => "One","Two","Three"
+    DataFrame colsDF = df.cols(&df);
+    assert(colsDF.numColumns(&colsDF)==1);
+    assert(colsDF.numRows(&colsDF)==3);
+
+    const Series* colSer = colsDF.getSeries(&colsDF, 0);
+    assert(strcmp(colSer->name,"columns")==0);
+
+    char* st=NULL;
+    // row0 => "One", row1=>"Two", row2=>"Three"
+    bool got = seriesGetString(colSer, 2, &st);
+    assert(got && strcmp(st,"Three")==0);
+    free(st);
+
+    DataFrame_Destroy(&colsDF);
+    DataFrame_Destroy(&df);
+
+    printf("testDfColumns passed.\n");
+}
+
+// If you need a quick copyDataFrame to help in tests:
+static void copyDataFrame(const DataFrame* src, DataFrame* dst)
+{
+    DataFrame_Create(dst);
+    size_t nCols = src->numColumns(src);
+    for (size_t c = 0; c < nCols; c++) {
+        const Series* s = src->getSeries(src, c);
+        if (!s) continue;
+        // build a copy series
+        Series copyS;
+        seriesInit(&copyS, s->name, s->type);
+
+        size_t nRows = seriesSize(s);
+        for (size_t r = 0; r < nRows; r++) {
+            switch (s->type) {
+                case DF_INT: {
+                    int val;
+                    if (seriesGetInt(s, r, &val)) {
+                        seriesAddInt(&copyS, val);
+                    }
+                } break;
+                case DF_DOUBLE: {
+                    double dv;
+                    if (seriesGetDouble(s, r, &dv)) {
+                        seriesAddDouble(&copyS, dv);
+                    }
+                } break;
+                case DF_STRING: {
+                    char* strVal = NULL;
+                    if (seriesGetString(s, r, &strVal)) {
+                        seriesAddString(&copyS, strVal);
+                        free(strVal);
+                    }
+                } break;
+                case DF_DATETIME: {
+                    long long dtVal;
+                    if (seriesGetDateTime(s, r, &dtVal)) {
+                        seriesAddDateTime(&copyS, dtVal);
+                    }
+                } break;
+            }
+        }
+        dst->addSeries(dst, &copyS);
+        seriesFree(&copyS);
+    }
+}
+
+// ------------- 1) test dfSetValue_impl -----------------
+
+static void testSetValue(void)
+{
+    printf("Running testSetValue...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {10,20,30};
+    Series sA = buildIntSeries("A", colA, 3);
+    df.addSeries(&df, &sA);
+    seriesFree(&sA);
+
+    // set cell => row=1,col=0 => from 20 => let's set it to 999
+    int newVal = 999;
+    DataFrame updated = df.setValue(&df, 1, 0, &newVal);
+    // check if updated => col0 => row1 => 999
+    const Series* updCol = updated.getSeries(&updated, 0);
+    int val=0;
+    bool got = seriesGetInt(updCol, 1, &val);
+    assert(got && val==999);
+
+    // check row0 => remains 10
+    seriesGetInt(updCol, 0, &val);
+    assert(val==10);
+
+    DataFrame_Destroy(&updated);
+    DataFrame_Destroy(&df);
+
+    printf("testSetValue passed.\n");
+}
+
+// ------------- 2) test dfSetRow_impl -----------------
+
+static void testSetRow(void)
+{
+    printf("Running testSetRow...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3,4};
+    int colB[] = {10,20,30,40};
+    Series sA = buildIntSeries("A", colA, 4);
+    Series sB = buildIntSeries("B", colB, 4);
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+
+    // We'll set row=2 => new values => for 2 columns => {777,888}
+    int newValA = 777;
+    int newValB = 888;
+    const void* rowVals[2];
+    rowVals[0] = &newValA; // for col0 => "A"
+    rowVals[1] = &newValB; // for col1 => "B"
+
+    DataFrame updated = df.setRow(&df, 2, rowVals, 2);
+    // check => row2 => col"A"=777, col"B"=888
+    {
+        const Series* cA = updated.getSeries(&updated, 0);
+        const Series* cB = updated.getSeries(&updated, 1);
+        int vA=0, vB=0;
+        bool gotA = seriesGetInt(cA, 2, &vA);
+        bool gotB = seriesGetInt(cB, 2, &vB);
+        assert(gotA && gotB);
+        assert(vA==777);
+        assert(vB==888);
+    }
+    // check row1 => still 2,20
+    {
+        const Series* cA = updated.getSeries(&updated, 0);
+        int valA=0;
+        seriesGetInt(cA,1,&valA);
+        assert(valA==2);
+    }
+
+    DataFrame_Destroy(&updated);
+    DataFrame_Destroy(&df);
+
+    printf("testSetRow passed.\n");
+}
+
+// ------------- 3) test dfSetColumn_impl --------------
+
+static void testSetColumn(void)
+{
+    printf("Running testSetColumn...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int cX[] = {11,22,33};
+    Series sX = buildIntSeries("X", cX, 3);
+    int cY[] = {100,200,300};
+    Series sY = buildIntSeries("Y", cY, 3);
+
+    df.addSeries(&df, &sX);
+    df.addSeries(&df, &sY);
+
+    seriesFree(&sX);
+    seriesFree(&sY);
+
+    // We'll build a new column "NewY" with values => 999,999,999 => but same rowcount
+    int newVals[] = {999,999,999};
+    Series sNew;
+    seriesInit(&sNew, "NewY", DF_INT);
+    for (int i=0;i<3;i++){
+        seriesAddInt(&sNew, newVals[i]);
+    }
+
+    // setColumn => oldName="Y" => newCol => sNew
+    DataFrame updated = df.setColumn(&df, "Y", &sNew);
+    // check => col0 => "X" unchanged => row0 => 11, col1 => "Y" data => now [999,999,999], but name => "NewY"? 
+    // Actually we keep the new name => "NewY" or you can keep old name. Up to your implementation.
+    // We'll assume we replaced with exactly newCol => name => "NewY".
+    const Series* c0 = updated.getSeries(&updated, 0);
+    const Series* c1 = updated.getSeries(&updated, 1);
+    assert(strcmp(c0->name,"X")==0);
+    assert(strcmp(c1->name,"NewY")==0);
+
+    int val=0;
+    bool got = seriesGetInt(c1,2,&val);
+    assert(got && val==999);
+
+    DataFrame_Destroy(&updated);
+    seriesFree(&sNew);
+    DataFrame_Destroy(&df);
+
+    printf("testSetColumn passed.\n");
+}
+
+// ------------- 4) test dfRenameColumn_impl --------------
+
+static void testRenameColumn(void)
+{
+    printf("Running testRenameColumn...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    Series sA = buildIntSeries("A", colA, 3);
+    df.addSeries(&df,&sA);
+    seriesFree(&sA);
+
+    int colB[] = {10,20,30};
+    Series sB = buildIntSeries("B", colB, 3);
+    df.addSeries(&df,&sB);
+    seriesFree(&sB);
+
+    // rename "A" => "Alpha"
+    DataFrame renamed = df.renameColumn(&df, "A","Alpha");
+    // check => col0 => name="Alpha", col1 => name="B"
+    const Series* c0 = renamed.getSeries(&renamed, 0);
+    const Series* c1 = renamed.getSeries(&renamed, 1);
+    assert(strcmp(c0->name,"Alpha")==0);
+    assert(strcmp(c1->name,"B")==0);
+
+    // rename non-existing => "Bogus" => "Nope" => skip
+    DataFrame skip = df.renameColumn(&df, "Bogus","Nope");
+    // col0 => "A", col1=>"B"
+    const Series* sc0 = skip.getSeries(&skip, 0);
+    assert(strcmp(sc0->name,"A")==0);
+
+    DataFrame_Destroy(&renamed);
+    DataFrame_Destroy(&skip);
+    DataFrame_Destroy(&df);
+
+    printf("testRenameColumn passed.\n");
+}
+
+// ------------- 5) test dfReindex_impl -----------------
+
+
+static void testReindex(void)
+{
+    printf("Running testReindex...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr1[] = {10,20,30,40};
+    Series s1 = buildIntSeries("One", arr1, 4);
+    df.addSeries(&df,&s1);
+    seriesFree(&s1);
+
+    // reindex => e.g. newIndices => {0,2,5}, size=3 => row0=>0, row1=>2, row2=>5 => out-of-range => NA
+    size_t newIdx[] = {0,2,5};
+    DataFrame rdx = df.reindex(&df, newIdx, 3);
+
+    // col0 => "One", row0 => 10, row1 =>30, row2 => NA(0?)
+    const Series* col0 = rdx.getSeries(&rdx, 0);
+    int val=0;
+    bool got = seriesGetInt(col0, 1, &val);
+    assert(got && val==30);
+    got = seriesGetInt(col0, 2, &val);
+    // row2 => old row5 => out-of-range => NA => 0 if int
+    assert(got && val==0);
+
+    DataFrame_Destroy(&rdx);
+    DataFrame_Destroy(&df);
+
+    printf("testReindex passed.\n");
+}
+
+// ------------- 6) test dfTake_impl -----------------
+
+static void testTake(void)
+{
+    printf("Running testTake...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arrA[] = {10,20,30};
+    Series sA = buildIntSeries("A", arrA, 3);
+    df.addSeries(&df,&sA);
+    seriesFree(&sA);
+
+    // e.g. take => {2,2,0} => duplicates => row2, row2, row0
+    size_t tIdx[] = {2,2,0};
+    DataFrame took = df.take(&df, tIdx, 3);
+    // => 1 column => "A", 3 rows => row0 => old row2 => 30, row1 => old row2 => 30, row2 => old row0 => 10
+    assert(took.numColumns(&took)==1);
+    assert(took.numRows(&took)==3);
+
+    const Series* col = took.getSeries(&took,0);
+    int val=0;
+    bool got = seriesGetInt(col,0,&val);
+    assert(got && val==30);
+    seriesGetInt(col,2,&val);
+    assert(val==10);
+
+    DataFrame_Destroy(&took);
+    DataFrame_Destroy(&df);
+
+    printf("testTake passed.\n");
+}
+
+// ------------- 7) test dfReorderColumns_impl -----------
+
+
+static void testReorderColumns(void)
+{
+    printf("Running testReorderColumns...\n");
+
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    int colB[] = {4,5,6};
+    int colC[] = {7,8,9};
+    Series sA = buildIntSeries("A", colA, 3);
+    Series sB = buildIntSeries("B", colB, 3);
+    Series sC = buildIntSeries("C", colC, 3);
+
+    df.addSeries(&df,&sA);
+    df.addSeries(&df,&sB);
+    df.addSeries(&df,&sC);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+    seriesFree(&sC);
+
+    // reorder => e.g. newOrder => {2,0,1} => means col2->A, col0->B, col1->C
+    size_t newOrd[] = {2,0,1};
+    DataFrame reordered = df.reorderColumns(&df, newOrd, 3);
+    // => columns => 3 => col0 => old2 => "C", col1 => old0 => "A", col2 => old1 => "B"
+
+    const Series* c0 = reordered.getSeries(&reordered,0);
+    const Series* c1 = reordered.getSeries(&reordered,1);
+    const Series* c2 = reordered.getSeries(&reordered,2);
+    assert(strcmp(c0->name,"C")==0);
+    assert(strcmp(c1->name,"A")==0);
+    assert(strcmp(c2->name,"B")==0);
+
+    // check row2 => c0 => old row2 => colC => 9
+    int val=0;
+    bool got = seriesGetInt(c0,2,&val);
+    assert(got && val==9);
+
+    DataFrame_Destroy(&reordered);
+    DataFrame_Destroy(&df);
+
+    printf("testReorderColumns passed.\n");
+}
+
+// ------------------------------------------------------------------
+// Master test driver: calls each function's test
+// ------------------------------------------------------------------
 void testIndexing(void)
 {
-    printf("Running DataFrame indexing tests (at, iat, loc, iloc, drop, pop, insert, index, columns)...\n");
+    printf("Running DataFrame indexing tests...\n");
 
-    // Basic indexing
-    testAtIatBasic();
-    testLocSubsets();
-    testIlocSubsets();
-
-    // Extended methods
-    testDropPopInsert();
-    testIndexAndColumns();
-
-    printf("All DataFrame indexing tests (including new functions) passed successfully!\n");
+    testDfAt();
+    testDfIat();
+    testDfLoc();
+    testDfIloc();
+    testDfDrop();
+    testDfPop();
+    testDfInsert();
+    testDfIndex();
+    testDfColumns();
+    testSetValue();
+    testSetRow();
+    testSetColumn();
+    testRenameColumn();
+    testReindex();
+    testTake();
+    testReorderColumns();
+    printf("All DataFrame indexing tests passed successfully!\n");
 }
