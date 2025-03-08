@@ -3277,6 +3277,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 # Querying
 # Querying::DataFrame head(const DataFrame* df, size_t n)
+![head](diagrams/head.png "head")
 
 ## Usage:
 ```c
@@ -3308,6 +3309,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame tail(const DataFrame* df, size_t n)
+![tail](diagrams/tail.png "tail")
 
 ## Usage:
 ```c
@@ -3339,6 +3341,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Querying::DataFrame describe(const DataFrame* df)
+![describe](diagrams/describe.png "describe")
 
 ## Usage:
 ```c
@@ -3369,6 +3372,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Querying::DataFrame slice(const DataFrame* df, size_t start, size_t end)
+![slice](diagrams/slice.png "slice")
 
 ## Usage:
 ```c
@@ -3398,6 +3402,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame sample(const DataFrame* df, size_t count)
+![sample](diagrams/sample.png "sample")
 
 ## Usage:
 ```c
@@ -3420,6 +3425,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Querying::DataFrame selectColumns(const DataFrame* df, const size_t* colIndices, size_t count)
+![selectColumns](diagrams/selectColumns.png "selectColumns")
 
 ## Usage:
 ```c
@@ -3458,6 +3464,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame dropColumns(const DataFrame* df, const size_t* dropIndices, size_t dropCount)
+![dropColumns](diagrams/dropColumns.png "dropColumns")
 
 ## Usage:
 ```c
@@ -3501,6 +3508,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame renameColumns(const DataFrame* df, const char** oldNames, const char** newNames, size_t count)
+![renameColumns](diagrams/renameColumns.png "renameColumns")
 
 ## Usage:
 ```c
@@ -3527,6 +3535,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Querying::DataFrame filter(const DataFrame* df, RowPredicate predicate)
+![filter](diagrams/filter.png "filter")
 
 ## Usage:
 ```c
@@ -3547,6 +3556,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame dropNA(const DataFrame* df)
+![dropNA](diagrams/dropNA.png "dropNA")
 
 ## Usage:
 ```c
@@ -3569,6 +3579,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame sort(const DataFrame* df, size_t columnIndex, bool ascending)
+![sort](diagrams/sort.png "sort")
 
 ## Usage:
 ```c
@@ -3604,6 +3615,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame dropDuplicates(const DataFrame* df, const size_t* subsetCols, size_t subsetCount)
+![dropDuplicates](diagrams/dropDuplicates.png "dropDuplicates")
 
 ## Usage:
 ```c
@@ -3624,6 +3636,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame unique(const DataFrame* df, size_t colIndex)
+![unique](diagrams/unique.png "unique")
 
 ## Usage:
 ```c
@@ -3644,6 +3657,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
     DataFrame_Destroy(&df);
 ```
 # Querying::DataFrame transpose(const DataFrame* df)
+![transpose](diagrams/transpose.png "transpose")
 
 ## Usage:
 ```c
@@ -3676,6 +3690,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::size_t indexOf(const DataFrame* df, size_t colIndex, double value)
+![indexOf](diagrams/indexOf.png "indexOf")
 
 ## Usage:
 ```c
@@ -3699,6 +3714,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame apply(const DataFrame* df, RowFunction func)
+![apply](diagrams/apply.png "apply")
 
 ## Usage:
 ```c
@@ -3724,6 +3740,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 
 # Querying::DataFrame where(const DataFrame* df, RowPredicate predicate, double defaultVal)
+![where](diagrams/where.png "where")
 
 ## Usage:
 ```c
@@ -3750,6 +3767,7 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 ```
 
 # Querying::DataFrame explode(const DataFrame* df, size_t colIndex)
+![explode](diagrams/explode.png "explode")
 
 ## Usage:
 ```c
