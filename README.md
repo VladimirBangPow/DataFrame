@@ -3745,6 +3745,45 @@ bool myFilterPredicate(const DataFrame* df, size_t rowIdx)
 # Querying::DataFrame apply(const DataFrame* df, RowFunction func)
 ![apply](diagrams/apply.png "apply")
 
+## Example Function to be Applied:
+```c
+// Suppose your DataFrame has "A" and "B" as DF_INT columns:
+void sumRowFunction(DataFrame* outDF, const DataFrame* inDF, size_t rowIndex)
+{
+    // Ensure outDF has a single DF_INT column named "Sum". If not present, create it.
+    if (outDF->numColumns(outDF) == 0) {
+        Series sumSeries;
+        seriesInit(&sumSeries, "Sum", DF_INT);
+        outDF->addSeries(outDF, &sumSeries);
+        seriesFree(&sumSeries);
+    }
+    
+    // Grab references to the input's "A" and "B" columns.
+    // (Error-checking omitted for brevity; you might check if they're DF_INT, etc.)
+    const size_t colA = 0;  // Suppose "A" is column 0
+    const size_t colB = 1;  // Suppose "B" is column 1
+    const Series* aSeries = inDF->getSeries(inDF, colA);
+    const Series* bSeries = inDF->getSeries(inDF, colB);
+
+    // Read A[rowIndex], B[rowIndex]:
+    int aValue = 0, bValue = 0;
+    seriesGetInt(aSeries, rowIndex, &aValue);
+    seriesGetInt(bSeries, rowIndex, &bValue);
+
+    // Sum them up:
+    int sumValue = aValue + bValue;
+
+    // Now we add that sumValue to the output DataFrame's single column "Sum".
+    // We'll do so by building a small rowData array with 1 pointer (since we have 1 column).
+    const void* rowData[1];
+    rowData[0] = (const void*)&sumValue;  // pointer to sumValue
+
+    // Append a new row to outDF.
+    outDF->addRow(outDF, rowData);
+}
+
+```
+
 ## Usage:
 ```c
     DataFrame df;
