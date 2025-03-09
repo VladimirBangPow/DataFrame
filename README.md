@@ -3537,6 +3537,35 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 # Querying::DataFrame filter(const DataFrame* df, RowPredicate predicate)
 ![filter](diagrams/filter.png "filter")
 
+## Predicate Example:
+```c
+bool myFilterPredicate(const DataFrame* df, size_t rowIdx)
+{
+    // We assume col0 => ID, col1 => City, col2 => Score
+    // Keep if City == "Boston" OR Score >= 80
+    const Series* citySeries  = df->getSeries(df, 1);
+    const Series* scoreSeries = df->getSeries(df, 2);
+
+    // 1) Check City
+    char* cityStr = NULL;
+    bool cityOk = seriesGetString(citySeries, rowIdx, &cityStr);
+    
+    // 2) Check Score
+    int scoreVal = 0; // or double, depending on DF type
+    bool scoreOk = seriesGetInt(scoreSeries, rowIdx, &scoreVal); 
+
+    // Evaluate the condition:
+    bool keep = false;
+    if (cityOk && scoreOk) {
+        keep = (strcmp(cityStr, "Boston") == 0) || (scoreVal >= 80);
+    }
+
+    if (cityStr) free(cityStr);
+    return keep;
+}
+
+```
+
 ## Usage:
 ```c
     DataFrame df;
