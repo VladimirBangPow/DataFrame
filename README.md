@@ -3809,6 +3809,21 @@ void sumRowFunction(DataFrame* outDF, const DataFrame* inDF, size_t rowIndex)
 
 # Querying::DataFrame where(const DataFrame* df, RowPredicate predicate, double defaultVal)
 ![where](diagrams/where.png "where")
+## Example Predicate Function
+```c
+// Suppose "A" is column index 0, of type DF_INT
+bool predicateUnder10(const DataFrame* df, size_t rowIndex)
+{
+    // Get the Series for column "A" (or index 0).
+    const Series* sA = df->getSeries(df, 0);
+    int val;
+    // If we fail to get the int or val >= 10, return false
+    if (!seriesGetInt(sA, rowIndex, &val)) return false;
+    return (val < 10);
+}
+
+```
+
 
 ## Usage:
 ```c
