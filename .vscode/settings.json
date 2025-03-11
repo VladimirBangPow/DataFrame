@@ -1,0 +1,13 @@
+{
+    "files.associations": {
+        "dataframe.h": "c",
+        "dynamic_array.h": "c",
+        "stdbool.h": "c",
+        "series.h": "c",
+        "core_test.h": "c",
+        "query_test.h": "c",
+        "string.h": "c",
+        "stdio.h": "c",
+        "time.h": "c"
+    }
+}
