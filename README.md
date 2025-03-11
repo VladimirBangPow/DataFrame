@@ -2517,5 +2517,1377 @@ Given a DataFrame `df` and a column index `colIndex`, the **groupBy** function r
 
 ```
 
+# Indexing
+# Indexing::DataFrame at(const DataFrame* df, size_t rowIndex, const char*colName)
+![at](diagrams/at.png "at")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Build 2 columns: "Nums"(int), "Words"(string), 5 rows
+    int nums[] = {10,20,30,40,50};
+    const char* words[] = {"Alpha","Beta","Gamma","Delta","Epsilon"};
+
+    Series sNums = buildIntSeries("Nums", nums, 5);
+    df.addSeries(&df, &sNums);
+    seriesFree(&sNums);
+
+    Series sWords = buildStringSeries("Words", words, 5);
+    df.addSeries(&df, &sWords);
+    seriesFree(&sWords);
+
+    // 1) Normal usage: at(row=2, colName="Nums") => should produce a 1×1 DF with "Nums"[0] = 30
+    {
+        DataFrame cellDF = df.at(&df, 2, "Nums");
+        assert(cellDF.numColumns(&cellDF)==1);
+        assert(cellDF.numRows(&cellDF)==1);
+
+        const Series* c = cellDF.getSeries(&cellDF, 0);
+        assert(strcmp(c->name, "Nums")==0);
+        int val=0;
+        bool got = seriesGetInt(c, 0, &val);
+        assert(got && val==30);
+
+        DataFrame_Destroy(&cellDF);
+    }
+
+    // 2) Out-of-range row => empty DF
+    {
+        DataFrame emptyDF = df.at(&df, 10, "Nums");
+        assert(emptyDF.numColumns(&emptyDF)==0);
+        assert(emptyDF.numRows(&emptyDF)==0);
+        DataFrame_Destroy(&emptyDF);
+    }
+
+    // 3) colName not found => empty DF
+    {
+        DataFrame noCol = df.at(&df, 1, "Bogus");
+        assert(noCol.numColumns(&noCol)==0);
+        assert(noCol.numRows(&noCol)==0);
+        DataFrame_Destroy(&noCol);
+    }
+
+    DataFrame_Destroy(&df);
+```
 
 
+# Indexing::DataFrame iat(const DataFrame* df, size_t rowIndex, size_t colIndex)
+![iat](diagrams/iat.png "iat")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int nums[] = {10,20,30,40,50};
+    const char* words[] = {"Alpha","Beta","Gamma","Delta","Epsilon"};
+
+    Series sNums = buildIntSeries("Nums", nums, 5);
+    df.addSeries(&df, &sNums);
+    seriesFree(&sNums);
+
+    Series sWords = buildStringSeries("Words", words, 5);
+    df.addSeries(&df, &sWords);
+    seriesFree(&sWords);
+
+    // 1) dfIat(row=3, col=1) => should produce "Words" row => "Delta"
+    {
+        DataFrame cDF = df.iat(&df, 3, 1);
+        assert(cDF.numColumns(&cDF)==1);
+        assert(cDF.numRows(&cDF)==1);
+
+        const Series* col = cDF.getSeries(&cDF, 0);
+        assert(strcmp(col->name,"Words")==0);
+        char* st=NULL;
+        bool got = seriesGetString(col, 0, &st);
+        assert(got && strcmp(st,"Delta")==0);
+        free(st);
+
+        DataFrame_Destroy(&cDF);
+    }
+
+    // 2) row out-of-range => empty
+    {
+        DataFrame eDF = df.iat(&df, 10, 1);
+        assert(eDF.numColumns(&eDF)==0);
+        assert(eDF.numRows(&eDF)==0);
+        DataFrame_Destroy(&eDF);
+    }
+
+    // 3) col out-of-range => empty
+    {
+        DataFrame e2 = df.iat(&df, 1, 5);
+        assert(e2.numColumns(&e2)==0);
+        assert(e2.numRows(&e2)==0);
+        DataFrame_Destroy(&e2);
+    }
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame loc(const DataFrame* df, const size_t* rowIndices, size_t rowCount, const char* const* colNames, size_t colCount)
+![loc](diagrams/loc.png "loc")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 3 columns => "A","B","C"
+    int arrA[] = {10,20,30,40,50};
+    int arrB[] = {100,200,300,400,500};
+    const char* arrC[] = {"X","Y","Z","P","Q"};
+
+    Series sA = buildIntSeries("A", arrA, 5);
+    df.addSeries(&df, &sA);
+    seriesFree(&sA);
+
+    Series sB = buildIntSeries("B", arrB, 5);
+    df.addSeries(&df, &sB);
+    seriesFree(&sB);
+
+    Series sC = buildStringSeries("C", arrC, 5);
+    df.addSeries(&df, &sC);
+    seriesFree(&sC);
+
+    // 1) rowIndices => {0,2,4}, colNames => {"A","C"}
+    {
+        size_t rowIdx[] = {0,2,4};
+        const char* colNames[] = {"A","C"};
+        DataFrame subDF = df.loc(&df, rowIdx, 3, colNames, 2);
+        assert(subDF.numColumns(&subDF)==2);
+        assert(subDF.numRows(&subDF)==3);
+
+        // col0 => "A" => row0 =>10, row1 =>30, row2 =>50
+        const Series* c0 = subDF.getSeries(&subDF, 0);
+        assert(strcmp(c0->name,"A")==0);
+        int val=0;
+        bool got = seriesGetInt(c0, 2, &val);
+        assert(got && val==50);
+
+        // col1 => "C" => row1 => "Z"
+        const Series* c1 = subDF.getSeries(&subDF, 1);
+        char* st=NULL;
+        got = seriesGetString(c1, 1, &st);
+        assert(got && strcmp(st,"Z")==0);
+        free(st);
+
+        DataFrame_Destroy(&subDF);
+    }
+
+    // 2) unknown col => skip
+    {
+        size_t rowIdx2[] = {0,1,2};
+        const char* colNames2[] = {"A","Bogus","C"};
+        DataFrame skipDF = df.loc(&df, rowIdx2, 3, colNames2, 3);
+        // => col "A","C" only
+        assert(skipDF.numColumns(&skipDF)==2);
+        DataFrame_Destroy(&skipDF);
+    }
+
+    // 3) out-of-range row => skip
+    {
+        size_t rowIdx3[] = {1,9}; 
+        const char* coln[] = {"B"};
+        DataFrame part = df.loc(&df, rowIdx3, 2, coln, 1);
+        // => only row1 is valid => 1 row
+        assert(part.numColumns(&part)==1);
+        assert(part.numRows(&part)==1);
+        DataFrame_Destroy(&part);
+    }
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame iloc(const DataFrame* df, size_t rowStart, size_t rowEnd, const size_t* colIndices, size_t colCount)
+![iloc](diagrams/iloc.png "iloc")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 3 columns => "X"(string), "Y"(int), "Z"(int)
+    const char* vx[] = {"cat","dog","bird","fish","lion"};
+    Series sX = buildStringSeries("X", vx, 5);
+    df.addSeries(&df, &sX);
+    seriesFree(&sX);
+
+    int vy[] = {1,2,3,4,5};
+    Series sY = buildIntSeries("Y", vy, 5);
+    df.addSeries(&df, &sY);
+    seriesFree(&sY);
+
+    int vz[] = {10,20,30,40,50};
+    Series sZ = buildIntSeries("Z", vz, 5);
+    df.addSeries(&df, &sZ);
+    seriesFree(&sZ);
+
+    // 1) rows => [1..4) => row1,row2,row3 => columns => col0("X"), col2("Z")
+    {
+        size_t wantedCols[] = {0,2};
+        DataFrame slice = df.iloc(&df, 1, 4, wantedCols, 2);
+        assert(slice.numColumns(&slice)==2);
+        assert(slice.numRows(&slice)==3);
+
+        // col0 => "X", row2 => originally row3 => "fish"
+        const Series* cX = slice.getSeries(&slice, 0);
+        char* st=NULL;
+        bool got = seriesGetString(cX, 2, &st);
+        assert(got && strcmp(st,"fish")==0);
+        free(st);
+
+        // col1 => "Z", row0 => originally row1 => 20
+        const Series* cZ = slice.getSeries(&slice, 1);
+        int val=0;
+        got = seriesGetInt(cZ, 0, &val);
+        assert(got && val==20);
+
+        DataFrame_Destroy(&slice);
+    }
+
+    // 2) rowStart >= nRows => empty
+    {
+        size_t wantedCols2[] = {0,1};
+        DataFrame eDF = df.iloc(&df, 10, 12, wantedCols2, 2);
+        assert(eDF.numColumns(&eDF)==0);
+        assert(eDF.numRows(&eDF)==0);
+        DataFrame_Destroy(&eDF);
+    }
+
+    // 3) colIndices out-of-range => skip
+    {
+        size_t bigCols[] = {1,5};
+        DataFrame skipCols = df.iloc(&df, 0, 2, bigCols, 2);
+        // => only col1 => "Y"
+        assert(skipCols.numColumns(&skipCols)==1);
+        assert(skipCols.numRows(&skipCols)==2);
+        DataFrame_Destroy(&skipCols);
+    }
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame drop(const DataFrame* df, const char* const* colNames, size_t nameCount)
+![drop](diagrams/drop.png "drop")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    int colB[] = {10,20,30};
+    const char* colC[] = {"apple","banana","cherry"};
+
+    Series sA = buildIntSeries("A", colA, 3);
+    Series sB = buildIntSeries("B", colB, 3);
+    Series sC = buildStringSeries("C", colC, 3);
+
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+    df.addSeries(&df, &sC);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+    seriesFree(&sC);
+
+    // drop "B"
+    {
+        const char* dropNames[] = {"B"};
+        DataFrame dropped = df.drop(&df, dropNames, 1);
+        assert(dropped.numColumns(&dropped)==2);
+        assert(dropped.numRows(&dropped)==3);
+
+        const Series* c0 = dropped.getSeries(&dropped, 0);
+        assert(strcmp(c0->name,"A")==0);
+        const Series* c1 = dropped.getSeries(&dropped, 1);
+        assert(strcmp(c1->name,"C")==0);
+
+        DataFrame_Destroy(&dropped);
+    }
+
+    // drop multiple => e.g. "A","C"
+    {
+        const char* dropMulti[] = {"A","C"};
+        DataFrame d2 = df.drop(&df, dropMulti, 2);
+        // => only "B" remains
+        assert(d2.numColumns(&d2)==1);
+        assert(d2.numRows(&d2)==3);
+
+        const Series* onlyCol = d2.getSeries(&d2, 0);
+        assert(strcmp(onlyCol->name,"B")==0);
+
+        DataFrame_Destroy(&d2);
+    }
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame pop(const DataFrame* df, const char* colName, DataFrame* poppedColDF)
+![pop](diagrams/pop.png "pop")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    int colB[] = {10,20,30};
+    const char* colC[] = {"apple","banana","cherry"};
+
+    Series sA = buildIntSeries("A", colA, 3);
+    df.addSeries(&df, &sA);
+    seriesFree(&sA);
+
+    Series sB = buildIntSeries("B", colB, 3);
+    df.addSeries(&df, &sB);
+    seriesFree(&sB);
+
+    Series sC = buildStringSeries("C", colC, 3);
+    df.addSeries(&df, &sC);
+    seriesFree(&sC);
+
+    // pop "B"
+    {
+        DataFrame poppedCol;
+        DataFrame_Create(&poppedCol);
+
+        DataFrame afterPop = df.pop(&df, "B", &poppedCol);
+        // afterPop => "A","C" => 2 cols, 3 rows
+        // poppedCol => "B" => 1 col, 3 rows
+        assert(afterPop.numColumns(&afterPop)==2);
+        assert(afterPop.numRows(&afterPop)==3);
+        assert(poppedCol.numColumns(&poppedCol)==1);
+        assert(poppedCol.numRows(&poppedCol)==3);
+
+        const Series* poppedSeries = poppedCol.getSeries(&poppedCol, 0);
+        assert(strcmp(poppedSeries->name,"B")==0);
+        int val=0;
+        bool got = seriesGetInt(poppedSeries,2,&val);
+        assert(got && val==30);
+
+        DataFrame_Destroy(&poppedCol);
+        DataFrame_Destroy(&afterPop);
+    }
+
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame insert(const DataFrame* df, size_t insertPos, const Series* newCol)
+![insert](diagrams/insert.png "insert")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    int colB[] = {10,20,30};
+    Series sA = buildIntSeries("A", colA, 3);
+    Series sB = buildIntSeries("B", colB, 3);
+
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+
+    // Insert "Z"(3 rows) at position=1
+    Series sZ;
+    seriesInit(&sZ, "Z", DF_INT);
+    seriesAddInt(&sZ,100);
+    seriesAddInt(&sZ,200);
+    seriesAddInt(&sZ,300);
+
+    DataFrame insDF = df.insert(&df,1,&sZ);
+    // => columns => ["A"(0), "Z"(1), "B"(2)] => total 3 columns
+    assert(insDF.numColumns(&insDF)==3);
+    const Series* zCol = insDF.getSeries(&insDF, 1);
+    assert(strcmp(zCol->name,"Z")==0);
+    int val=0;
+    bool got = seriesGetInt(zCol, 2, &val);
+    assert(got && val==300);
+
+    DataFrame_Destroy(&insDF);
+    seriesFree(&sZ);
+
+    // Insert mismatch => 2 rows vs. DF has 3 => skip
+    Series sBad;
+    seriesInit(&sBad,"Bad",DF_INT);
+    seriesAddInt(&sBad,999);
+    seriesAddInt(&sBad,111);
+
+    DataFrame mismatch = df.insert(&df,1,&sBad);
+    // => should remain 2 columns => "A","B"
+    assert(mismatch.numColumns(&mismatch)==2);
+
+    DataFrame_Destroy(&mismatch);
+    seriesFree(&sBad);
+
+    DataFrame_Destroy(&df);
+```
+
+
+
+# Indexing::DataFrame index(const DataFrame* df)
+![index](diagrams/index.png "index")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 2 columns => 4 rows
+    int colX[] = {11,22,33,44};
+    int colY[] = {100,200,300,400};
+    Series sX = buildIntSeries("X", colX, 4);
+    Series sY = buildIntSeries("Y", colY, 4);
+    df.addSeries(&df, &sX);
+    df.addSeries(&df, &sY);
+
+    seriesFree(&sX);
+    seriesFree(&sY);
+
+    // df.index => single col => "index" => [0,1,2,3]
+    DataFrame idxDF = df.index(&df);
+    assert(idxDF.numColumns(&idxDF)==1);
+    assert(idxDF.numRows(&idxDF)==4);
+
+    const Series* idxS = idxDF.getSeries(&idxDF, 0);
+    assert(strcmp(idxS->name,"index")==0);
+    int val=0;
+    bool got = seriesGetInt(idxS,3,&val);
+    assert(got && val==3);
+
+    DataFrame_Destroy(&idxDF);
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame cols(const DataFrame* df)
+![columns](diagrams/columns.png "columns")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 3 columns => "One","Two","Three"
+    int col1[] = {10,20};
+    Series s1 = buildIntSeries("One", col1, 2);
+    df.addSeries(&df, &s1);
+    seriesFree(&s1);
+
+    int col2[] = {100,200};
+    Series s2 = buildIntSeries("Two", col2, 2);
+    df.addSeries(&df, &s2);
+    seriesFree(&s2);
+
+    const char* arr3[] = {"Hello","World"};
+    Series s3 = buildStringSeries("Three", arr3, 2);
+    df.addSeries(&df,&s3);
+    seriesFree(&s3);
+
+    // df.columns => single col => "columns" => rows => "One","Two","Three"
+    DataFrame colsDF = df.cols(&df);
+    assert(colsDF.numColumns(&colsDF)==1);
+    assert(colsDF.numRows(&colsDF)==3);
+
+    const Series* colSer = colsDF.getSeries(&colsDF, 0);
+    assert(strcmp(colSer->name,"columns")==0);
+
+    char* st=NULL;
+    // row0 => "One", row1=>"Two", row2=>"Three"
+    bool got = seriesGetString(colSer, 2, &st);
+    assert(got && strcmp(st,"Three")==0);
+    free(st);
+
+    DataFrame_Destroy(&colsDF);
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame setValue(const DataFrame* df, size_t rowIndex, size_t colIndex, const void* newValue)
+![setValue](diagrams/setValue.png "setValue")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {10,20,30};
+    Series sA = buildIntSeries("A", colA, 3);
+    df.addSeries(&df, &sA);
+    seriesFree(&sA);
+
+    // set cell => row=1,col=0 => from 20 => let's set it to 999
+    int newVal = 999;
+    DataFrame updated = df.setValue(&df, 1, 0, &newVal);
+    // check if updated => col0 => row1 => 999
+    const Series* updCol = updated.getSeries(&updated, 0);
+    int val=0;
+    bool got = seriesGetInt(updCol, 1, &val);
+    assert(got && val==999);
+
+    // check row0 => remains 10
+    seriesGetInt(updCol, 0, &val);
+    assert(val==10);
+
+    DataFrame_Destroy(&updated);
+    DataFrame_Destroy(&df);
+
+```
+
+
+# Indexing::DataFrame setRow(const DataFrame* df, size_t rowIndex, const void** rowValues, size_t valueCount)
+![setRow](diagrams/setRow.png "setRow")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3,4};
+    int colB[] = {10,20,30,40};
+    Series sA = buildIntSeries("A", colA, 4);
+    Series sB = buildIntSeries("B", colB, 4);
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+
+    // We'll set row=2 => new values => for 2 columns => {777,888}
+    int newValA = 777;
+    int newValB = 888;
+    const void* rowVals[2];
+    rowVals[0] = &newValA; // for col0 => "A"
+    rowVals[1] = &newValB; // for col1 => "B"
+
+    DataFrame updated = df.setRow(&df, 2, rowVals, 2);
+    // check => row2 => col"A"=777, col"B"=888
+    {
+        const Series* cA = updated.getSeries(&updated, 0);
+        const Series* cB = updated.getSeries(&updated, 1);
+        int vA=0, vB=0;
+        bool gotA = seriesGetInt(cA, 2, &vA);
+        bool gotB = seriesGetInt(cB, 2, &vB);
+        assert(gotA && gotB);
+        assert(vA==777);
+        assert(vB==888);
+    }
+    // check row1 => still 2,20
+    {
+        const Series* cA = updated.getSeries(&updated, 0);
+        int valA=0;
+        seriesGetInt(cA,1,&valA);
+        assert(valA==2);
+    }
+
+    DataFrame_Destroy(&updated);
+    DataFrame_Destroy(&df);
+
+```
+
+
+# Indexing::DataFrame setColumn(const DataFrame* df, const char* colName, const Series* newCol)
+![setColumn](diagrams/setColumn.png "setColumn")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int cX[] = {11,22,33};
+    Series sX = buildIntSeries("X", cX, 3);
+    int cY[] = {100,200,300};
+    Series sY = buildIntSeries("Y", cY, 3);
+
+    df.addSeries(&df, &sX);
+    df.addSeries(&df, &sY);
+
+    seriesFree(&sX);
+    seriesFree(&sY);
+
+    // We'll build a new column "NewY" with values => 999,999,999 => but same rowcount
+    int newVals[] = {999,999,999};
+    Series sNew;
+    seriesInit(&sNew, "NewY", DF_INT);
+    for (int i=0;i<3;i++){
+        seriesAddInt(&sNew, newVals[i]);
+    }
+
+    // setColumn => oldName="Y" => newCol => sNew
+    DataFrame updated = df.setColumn(&df, "Y", &sNew);
+    // check => col0 => "X" unchanged => row0 => 11, col1 => "Y" data => now [999,999,999], but name => "NewY"? 
+    // Actually we keep the new name => "NewY" or you can keep old name. Up to your implementation.
+    // We'll assume we replaced with exactly newCol => name => "NewY".
+    const Series* c0 = updated.getSeries(&updated, 0);
+    const Series* c1 = updated.getSeries(&updated, 1);
+    assert(strcmp(c0->name,"X")==0);
+    assert(strcmp(c1->name,"NewY")==0);
+
+    int val=0;
+    bool got = seriesGetInt(c1,2,&val);
+    assert(got && val==999);
+
+    DataFrame_Destroy(&updated);
+    seriesFree(&sNew);
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame renameColumn(const DataFrame* df, const char* oldName, const char* newName)
+![renameColumn](diagrams/renameColumn.png "renameColumn")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    Series sA = buildIntSeries("A", colA, 3);
+    df.addSeries(&df,&sA);
+    seriesFree(&sA);
+
+    int colB[] = {10,20,30};
+    Series sB = buildIntSeries("B", colB, 3);
+    df.addSeries(&df,&sB);
+    seriesFree(&sB);
+
+    // rename "A" => "Alpha"
+    DataFrame renamed = df.renameColumn(&df, "A","Alpha");
+    // check => col0 => name="Alpha", col1 => name="B"
+    const Series* c0 = renamed.getSeries(&renamed, 0);
+    const Series* c1 = renamed.getSeries(&renamed, 1);
+    assert(strcmp(c0->name,"Alpha")==0);
+    assert(strcmp(c1->name,"B")==0);
+
+    // rename non-existing => "Bogus" => "Nope" => skip
+    DataFrame skip = df.renameColumn(&df, "Bogus","Nope");
+    // col0 => "A", col1=>"B"
+    const Series* sc0 = skip.getSeries(&skip, 0);
+    assert(strcmp(sc0->name,"A")==0);
+
+    DataFrame_Destroy(&renamed);
+    DataFrame_Destroy(&skip);
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame reindex(const DataFrame* df, const size_t* newIndices, size_t newN)
+![reindex](diagrams/reindex.png "reindex")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr1[] = {10,20,30,40};
+    Series s1 = buildIntSeries("One", arr1, 4);
+    df.addSeries(&df,&s1);
+    seriesFree(&s1);
+
+    // reindex => e.g. newIndices => {0,2,5}, size=3 => row0=>0, row1=>2, row2=>5 => out-of-range => NA
+    size_t newIdx[] = {0,2,5};
+    DataFrame rdx = df.reindex(&df, newIdx, 3);
+
+    // col0 => "One", row0 => 10, row1 =>30, row2 => NA(0?)
+    const Series* col0 = rdx.getSeries(&rdx, 0);
+    int val=0;
+    bool got = seriesGetInt(col0, 1, &val);
+    assert(got && val==30);
+    got = seriesGetInt(col0, 2, &val);
+    // row2 => old row5 => out-of-range => NA => 0 if int
+    assert(got && val==0);
+
+    DataFrame_Destroy(&rdx);
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame take(const DataFrame* df, const size_t* rowIndices, size_t count)
+![take](diagrams/take.png "take")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arrA[] = {10,20,30};
+    Series sA = buildIntSeries("A", arrA, 3);
+    df.addSeries(&df,&sA);
+    seriesFree(&sA);
+
+    // e.g. take => {2,2,0} => duplicates => row2, row2, row0
+    size_t tIdx[] = {2,2,0};
+    DataFrame took = df.take(&df, tIdx, 3);
+    // => 1 column => "A", 3 rows => row0 => old row2 => 30, row1 => old row2 => 30, row2 => old row0 => 10
+    assert(took.numColumns(&took)==1);
+    assert(took.numRows(&took)==3);
+
+    const Series* col = took.getSeries(&took,0);
+    int val=0;
+    bool got = seriesGetInt(col,0,&val);
+    assert(got && val==30);
+    seriesGetInt(col,2,&val);
+    assert(val==10);
+
+    DataFrame_Destroy(&took);
+    DataFrame_Destroy(&df);
+```
+
+
+# Indexing::DataFrame reorderColumns(const DataFrame* df, const size_t* newOrder, size_t colCount)
+![reorderColumns](diagrams/reorderColumns.png "reorderColumns")
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int colA[] = {1,2,3};
+    int colB[] = {4,5,6};
+    int colC[] = {7,8,9};
+    Series sA = buildIntSeries("A", colA, 3);
+    Series sB = buildIntSeries("B", colB, 3);
+    Series sC = buildIntSeries("C", colC, 3);
+
+    df.addSeries(&df,&sA);
+    df.addSeries(&df,&sB);
+    df.addSeries(&df,&sC);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+    seriesFree(&sC);
+
+    // reorder => e.g. newOrder => {2,0,1} => means col2->A, col0->B, col1->C
+    size_t newOrd[] = {2,0,1};
+    DataFrame reordered = df.reorderColumns(&df, newOrd, 3);
+    // => columns => 3 => col0 => old2 => "C", col1 => old0 => "A", col2 => old1 => "B"
+
+    const Series* c0 = reordered.getSeries(&reordered,0);
+    const Series* c1 = reordered.getSeries(&reordered,1);
+    const Series* c2 = reordered.getSeries(&reordered,2);
+    assert(strcmp(c0->name,"C")==0);
+    assert(strcmp(c1->name,"A")==0);
+    assert(strcmp(c2->name,"B")==0);
+
+    // check row2 => c0 => old row2 => colC => 9
+    int val=0;
+    bool got = seriesGetInt(c0,2,&val);
+    assert(got && val==9);
+
+    DataFrame_Destroy(&reordered);
+    DataFrame_Destroy(&df);
+```
+
+# Querying
+# Querying::DataFrame head(const DataFrame* df, size_t n)
+![head](diagrams/head.png "head")
+
+## Usage:
+```c
+    // Create a DataFrame with 1 column & 6 rows for demonstration
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int col1[] = {10,20,30,40,50,60};
+    Series s1 = buildIntSeries("Nums", col1, 6);
+    bool ok = df.addSeries(&df, &s1);
+    assert(ok);
+    seriesFree(&s1);
+
+    // HEAD(3) => expect 3 rows
+    DataFrame headDF = df.head(&df, 3);
+    assert(headDF.numColumns(&headDF) == 1);
+    assert(headDF.numRows(&headDF) == 3);
+
+    // Spot check values
+    const Series* s = headDF.getSeries(&headDF, 0);
+    int val=0;
+    bool got = seriesGetInt(s, 0, &val);
+    assert(got && val==10);
+    got = seriesGetInt(s, 2, &val);
+    assert(got && val==30);
+
+    DataFrame_Destroy(&headDF);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame tail(const DataFrame* df, size_t n)
+![tail](diagrams/tail.png "tail")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int col1[] = {100,200,300,400,500};
+    Series s1 = buildIntSeries("Data", col1, 5);
+    bool ok = df.addSeries(&df, &s1);
+    assert(ok);
+    seriesFree(&s1);
+
+    // TAIL(2) => last 2 rows => [400, 500]
+    DataFrame tailDF = df.tail(&df, 2);
+    assert(tailDF.numColumns(&tailDF) == 1);
+    assert(tailDF.numRows(&tailDF) == 2);
+
+    const Series* s = tailDF.getSeries(&tailDF, 0);
+    int val=0;
+    // row0 => 400, row1 => 500
+    bool got = seriesGetInt(s, 0, &val);
+    assert(got && val==400);
+    seriesGetInt(s, 1, &val);
+    assert(val==500);
+
+    DataFrame_Destroy(&tailDF);
+    DataFrame_Destroy(&df);
+```
+
+
+# Querying::DataFrame describe(const DataFrame* df)
+![describe](diagrams/describe.png "describe")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // We'll add 2 numeric columns
+    int col1[] = {10,20,30,40};
+    Series s1 = buildIntSeries("C1", col1, 4);
+    df.addSeries(&df, &s1);
+    seriesFree(&s1);
+
+    int col2[] = {5,5,10,20};
+    Series s2 = buildIntSeries("C2", col2, 4);
+    df.addSeries(&df, &s2);
+    seriesFree(&s2);
+
+    // describe => should produce 2 rows (one per col), each with 5 columns: 
+    // colName, count, min, max, mean
+    DataFrame descDF = df.describe(&df);
+    // expect 2 rows, 5 columns
+    assert(descDF.numRows(&descDF)==2);
+    assert(descDF.numColumns(&descDF)==5);
+
+    DataFrame_Destroy(&descDF);
+    DataFrame_Destroy(&df);
+```
+
+
+# Querying::DataFrame slice(const DataFrame* df, size_t start, size_t end)
+![slice](diagrams/slice.png "slice")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // Single column => 6 values => 0..5
+    int arr[] = {0,1,2,3,4,5};
+    Series s = buildIntSeries("Vals", arr, 6);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // SLICE(2..5) => rows 2,3,4 => total 3
+    DataFrame sliceDF = df.slice(&df, 2, 5);
+    assert(sliceDF.numRows(&sliceDF)==3);
+    {
+        const Series* c = sliceDF.getSeries(&sliceDF, 0);
+        int val;
+        seriesGetInt(c, 0, &val); // originally row2 => 2
+        assert(val==2);
+        seriesGetInt(c, 2, &val); // originally row4 => 4
+        assert(val==4);
+    }
+
+    DataFrame_Destroy(&sliceDF);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame sample(const DataFrame* df, size_t count)
+![sample](diagrams/sample.png "sample")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr[] = {10,11,12,13,14,15};
+    Series s = buildIntSeries("Rand", arr, 6);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // sample(3) => random subset of 3
+    DataFrame samp = df.sample(&df, 3);
+    assert(samp.numRows(&samp)==3);
+    assert(samp.numColumns(&samp)==1);
+
+    DataFrame_Destroy(&samp);
+    DataFrame_Destroy(&df);
+```
+
+
+# Querying::DataFrame selectColumns(const DataFrame* df, const size_t* colIndices, size_t count)
+![selectColumns](diagrams/selectColumns.png "selectColumns")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // We'll have 3 columns, want to select the second & third
+    int colA[] = {1,2,3};
+    int colB[] = {10,20,30};
+    const char* colC[] = {"X","Y","Z"};
+
+    Series sA = buildIntSeries("A", colA, 3);
+    Series sB = buildIntSeries("B", colB, 3);
+    Series sC = buildStringSeries("C", colC, 3);
+
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+    df.addSeries(&df, &sC);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+    seriesFree(&sC);
+
+    // We want to select columns #1 and #2 => "B","C"
+    size_t indices[] = {1,2};
+    DataFrame sel = df.selectColumns(&df, indices, 2);
+    assert(sel.numColumns(&sel)==2);
+    assert(sel.numRows(&sel)==3);
+
+    // check col0 => "B"
+    const Series* s0 = sel.getSeries(&sel, 0);
+    assert(strcmp(s0->name,"B")==0);
+
+    DataFrame_Destroy(&sel);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame dropColumns(const DataFrame* df, const size_t* dropIndices, size_t dropCount)
+![dropColumns](diagrams/dropColumns.png "dropColumns")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 3 columns => "A","B","C"
+    int colA[] = {5,6,7};
+    int colB[] = {10,20,30};
+    int colC[] = {1,2,3};
+
+    Series sA = buildIntSeries("A", colA, 3);
+    Series sB = buildIntSeries("B", colB, 3);
+    Series sC;
+    seriesInit(&sC, "C", DF_INT);
+    for (int i=0; i<3; i++){
+        seriesAddInt(&sC, colC[i]);
+    }
+
+    df.addSeries(&df, &sA);
+    df.addSeries(&df, &sB);
+    df.addSeries(&df, &sC);
+
+    seriesFree(&sA);
+    seriesFree(&sB);
+    seriesFree(&sC);
+
+    // drop columns #1 => that is "B"
+    size_t dropIdx[] = {1};
+    DataFrame dropped = df.dropColumns(&df, dropIdx, 1);
+    // we keep "A","C"
+    assert(dropped.numColumns(&dropped)==2);
+    assert(dropped.numRows(&dropped)==3);
+
+    // check first col => "A"
+    const Series* c0 = dropped.getSeries(&dropped, 0);
+    assert(strcmp(c0->name, "A")==0);
+
+    DataFrame_Destroy(&dropped);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame renameColumns(const DataFrame* df, const char** oldNames, const char** newNames, size_t count)
+![renameColumns](diagrams/renameColumns.png "renameColumns")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr[] = {9,8,7};
+    Series s = buildIntSeries("OldName", arr, 3);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // rename OldName => NewName
+    const char* oldN[] = {"OldName"};
+    const char* newN[] = {"NewName"};
+    DataFrame ren = df.renameColumns(&df, oldN, newN, 1);
+
+    // check col0 => "NewName"
+    const Series* c0 = ren.getSeries(&ren, 0);
+    assert(strcmp(c0->name,"NewName")==0);
+
+    DataFrame_Destroy(&ren);
+    DataFrame_Destroy(&df);
+```
+
+
+# Querying::DataFrame filter(const DataFrame* df, RowPredicate predicate)
+![filter](diagrams/filter.png "filter")
+
+## Predicate Example:
+```c
+bool myFilterPredicate(const DataFrame* df, size_t rowIdx)
+{
+    // We assume col0 => ID, col1 => City, col2 => Score
+    // Keep if City == "Boston" OR Score >= 80
+    const Series* citySeries  = df->getSeries(df, 1);
+    const Series* scoreSeries = df->getSeries(df, 2);
+
+    // 1) Check City
+    char* cityStr = NULL;
+    bool cityOk = seriesGetString(citySeries, rowIdx, &cityStr);
+    
+    // 2) Check Score
+    int scoreVal = 0; // or double, depending on DF type
+    bool scoreOk = seriesGetInt(scoreSeries, rowIdx, &scoreVal); 
+
+    // Evaluate the condition:
+    bool keep = false;
+    if (cityOk && scoreOk) {
+        keep = (strcmp(cityStr, "Boston") == 0) || (scoreVal >= 80);
+    }
+
+    if (cityStr) free(cityStr);
+    return keep;
+}
+
+```
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr[] = {10,20,50,60};
+    Series sCol = buildIntSeries("Col", arr, 4);
+    df.addSeries(&df, &sCol);
+    seriesFree(&sCol);
+
+    DataFrame filtered = df.filter(&df, filterPredicateExample);
+    // keep rows where col<50 => that is row0=10, row1=20 => total 2
+    assert(filtered.numRows(&filtered)==2);
+
+    DataFrame_Destroy(&filtered);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame dropNA(const DataFrame* df)
+![dropNA](diagrams/dropNA.png "dropNA")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 1 column => [0,10,0,20]
+    int arr[] = {0,10,0,20};
+    Series s = buildIntSeries("Values", arr, 4);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // dropNA => remove row if col=0
+    // => we keep row1=10, row3=20 => total 2
+    DataFrame noNA = df.dropNA(&df);
+    assert(noNA.numRows(&noNA)==2);
+
+    DataFrame_Destroy(&noNA);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame sort(const DataFrame* df, size_t columnIndex, bool ascending)
+![sort](diagrams/sort.png "sort")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr[] = {30,10,20};
+    Series s = buildIntSeries("Data", arr, 3);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // sort ascending => [10,20,30]
+    DataFrame asc = df.sort(&df, 0, true);
+    {
+        const Series* c0 = asc.getSeries(&asc, 0);
+        int val;
+        seriesGetInt(c0, 0, &val); assert(val==10);
+        seriesGetInt(c0, 2, &val); assert(val==30);
+    }
+    DataFrame_Destroy(&asc);
+
+    // sort descending => [30,20,10]
+    DataFrame desc = df.sort(&df, 0, false);
+    {
+        const Series* c0 = desc.getSeries(&desc, 0);
+        int val;
+        seriesGetInt(c0, 0, &val); assert(val==30);
+        seriesGetInt(c0, 2, &val); assert(val==10);
+    }
+    DataFrame_Destroy(&desc);
+
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame dropDuplicates(const DataFrame* df, const size_t* subsetCols, size_t subsetCount)
+![dropDuplicates](diagrams/dropDuplicates.png "dropDuplicates")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    const char* arr[] = {"Apple","Apple","Banana","Apple"};
+    Series s = buildStringSeries("Fruits", arr, 4);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // dropDuplicates => keep first occurrence => Apple, Banana
+    DataFrame dd = df.dropDuplicates(&df, NULL, 0); // entire row
+    assert(dd.numRows(&dd)==2);
+    DataFrame_Destroy(&dd);
+
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame unique(const DataFrame* df, size_t colIndex)
+![unique](diagrams/unique.png "unique")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 1 col => repeated strings
+    const char* arr[] = {"A","A","B","C","C","C"};
+    Series s = buildStringSeries("Letters", arr, 6);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    DataFrame un = df.unique(&df, 0);
+    // distinct => "A","B","C"
+    assert(un.numRows(&un)==3);
+    DataFrame_Destroy(&un);
+
+    DataFrame_Destroy(&df);
+```
+# Querying::DataFrame transpose(const DataFrame* df)
+![transpose](diagrams/transpose.png "transpose")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // 2 columns => "X"(int), "Y"(string), each 2 rows
+    int colX[] = {1,2};
+    const char* colY[] = {"Alpha","Beta"};
+
+    Series sX = buildIntSeries("X", colX, 2);
+    Series sY = buildStringSeries("Y", colY, 2);
+
+    df.addSeries(&df, &sX);
+    df.addSeries(&df, &sY);
+
+    seriesFree(&sX);
+    seriesFree(&sY);
+
+    DataFrame t = df.transpose(&df);
+    // now we get 2 original rows => so 2 columns in new DF. 
+    // each col has 2 strings (since we do a textual transpose).
+
+    assert(t.numColumns(&t)==2);
+    // spot check row count => 2
+    assert(t.numRows(&t)==2);
+
+    DataFrame_Destroy(&t);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::size_t indexOf(const DataFrame* df, size_t colIndex, double value)
+![indexOf](diagrams/indexOf.png "indexOf")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr[] = {10,20,30,20};
+    Series s = buildIntSeries("Vals", arr, 4);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // indexOf => find first row where col=20 => row1
+    size_t idx = df.indexOf(&df, 0, 20.0);
+    assert(idx==1);
+
+    // not found => -1
+    size_t idx2 = df.indexOf(&df, 0, 999.0);
+    assert(idx2 == (size_t)-1);
+
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame apply(const DataFrame* df, RowFunction func)
+![apply](diagrams/apply.png "apply")
+
+## Example Function to be Applied:
+```c
+// Suppose your DataFrame has "A" and "B" as DF_INT columns:
+void sumRowFunction(DataFrame* outDF, const DataFrame* inDF, size_t rowIndex)
+{
+    // Ensure outDF has a single DF_INT column named "Sum". If not present, create it.
+    if (outDF->numColumns(outDF) == 0) {
+        Series sumSeries;
+        seriesInit(&sumSeries, "Sum", DF_INT);
+        outDF->addSeries(outDF, &sumSeries);
+        seriesFree(&sumSeries);
+    }
+    
+    // Grab references to the input's "A" and "B" columns.
+    // (Error-checking omitted for brevity; you might check if they're DF_INT, etc.)
+    const size_t colA = 0;  // Suppose "A" is column 0
+    const size_t colB = 1;  // Suppose "B" is column 1
+    const Series* aSeries = inDF->getSeries(inDF, colA);
+    const Series* bSeries = inDF->getSeries(inDF, colB);
+
+    // Read A[rowIndex], B[rowIndex]:
+    int aValue = 0, bValue = 0;
+    seriesGetInt(aSeries, rowIndex, &aValue);
+    seriesGetInt(bSeries, rowIndex, &bValue);
+
+    // Sum them up:
+    int sumValue = aValue + bValue;
+
+    // Now we add that sumValue to the output DataFrame's single column "Sum".
+    // We'll do so by building a small rowData array with 1 pointer (since we have 1 column).
+    const void* rowData[1];
+    rowData[0] = (const void*)&sumValue;  // pointer to sumValue
+
+    // Append a new row to outDF.
+    outDF->addRow(outDF, rowData);
+}
+
+```
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr[] = {1,2,3};
+    Series s = buildIntSeries("Base", arr, 3);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    DataFrame result = df.apply(&df, rowFunc);
+    // => col0 => [1+5, 2+5, 3+5] => [6,7,8]
+    assert(result.numRows(&result)==3);
+    const Series* c0 = result.getSeries(&result, 0);
+    int val;
+    seriesGetInt(c0, 2, &val);
+    assert(val==8);
+
+    DataFrame_Destroy(&result);
+    DataFrame_Destroy(&df);
+```
+
+
+# Querying::DataFrame where(const DataFrame* df, RowPredicate predicate, double defaultVal)
+![where](diagrams/where.png "where")
+## Example Predicate Function
+```c
+// Suppose "A" is column index 0, of type DF_INT
+bool predicateUnder10(const DataFrame* df, size_t rowIndex)
+{
+    // Get the Series for column "A" (or index 0).
+    const Series* sA = df->getSeries(df, 0);
+    int val;
+    // If we fail to get the int or val >= 10, return false
+    if (!seriesGetInt(sA, rowIndex, &val)) return false;
+    return (val < 10);
+}
+
+```
+
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    int arr[] = {10,20,50};
+    Series s = buildIntSeries("Vals", arr, 3);
+    df.addSeries(&df, &s);
+    seriesFree(&s);
+
+    // where => if predicate fails => set default=999
+    // row0=10 => keep 10, row1=20 => keep 20, row2=50 => 999
+    DataFrame wh = df.where(&df, wherePred, 999.0);
+    assert(wh.numRows(&wh)==3);
+    {
+        const Series* c0 = wh.getSeries(&wh, 0);
+        int val;
+        seriesGetInt(c0, 2, &val);
+        assert(val==999);
+    }
+    DataFrame_Destroy(&wh);
+    DataFrame_Destroy(&df);
+```
+
+# Querying::DataFrame explode(const DataFrame* df, size_t colIndex)
+![explode](diagrams/explode.png "explode")
+
+## Usage:
+```c
+    DataFrame df;
+    DataFrame_Create(&df);
+
+    // "List" => string, "Code" => int
+    Series sList, sCode;
+    seriesInit(&sList, "List", DF_STRING);
+    seriesInit(&sCode, "Code", DF_INT);
+
+    seriesAddString(&sList, "A,B");
+    seriesAddInt(&sCode, 100);
+
+    seriesAddString(&sList, "X");
+    seriesAddInt(&sCode, 200);
+
+    df.addSeries(&df, &sList);
+    df.addSeries(&df, &sCode);
+
+    seriesFree(&sList);
+    seriesFree(&sCode);
+
+    // explode col0 => "List"
+    DataFrame ex = df.explode(&df, 0);
+    // row0 => "A", code=100
+    // row1 => "B", code=100
+    // row2 => "X", code=200
+    assert(ex.numRows(&ex)==3);
+    {
+        const Series* cList = ex.getSeries(&ex, 0);
+        char* st=NULL;
+        seriesGetString(cList, 1, &st);
+        assert(strcmp(st,"B")==0);
+        free(st);
+    }
+
+    DataFrame_Destroy(&ex);
+    DataFrame_Destroy(&df);
+```
